@@ -1,0 +1,192 @@
+Atlas Stage 8 最终验收记录
+
+一、当前完成能力
+
+1. 文本输入 /ask
+2. 截图 OCR 输入 /ask_image
+3. 语音 Whisper 输入 /ask_audio
+4. Blackboard 状态读取 /blackboard
+5. 本地 Ollama qwen2.5:7b 回答生成
+6. Ollama 失败 fallback 到 generate_stub_answer()
+7. Resume Context 简历上下文注入与前端状态展示
+8. JD Context 岗位上下文注入与前端状态展示
+9. Resume-JD Match 规则评分与前端展示
+10. Critic Review 增强版
+11. Human-like Rewrite 口语化改写
+12. Question Memory 最近问答记忆
+13. Follow-up Questions 追问预测
+14. Knowledge Context 本地知识库
+15. 简单关键词 RAG
+16. Mock Interview 模拟面试
+17. Interview Report 面试复盘报告
+18. Markdown Report Export
+19. Clear History
+20. Reset Session
+21. Backend Status
+22. Config Status
+23. start-all.bat 一键启动
+
+二、本轮 Stage 8 产品化整理
+
+1. Stage 8.1
+   - 已完成完整验收。
+   - 已生成 Atlas_启动说明.txt。
+   - 已生成 Atlas_演示脚本.txt。
+   - 已生成 Atlas_Stage8_备份命令.bat。
+
+2. Stage 8.2
+   - 前端新增 Backend Status。
+   - 前端请求失败时显示可读提示，不只依赖 console。
+   - 关键工具按钮增加 loading 状态。
+   - 后端不可用时前端不会因为 fetchBlackboard 失败白屏。
+
+3. Stage 8.3
+   - 保留原有视觉风格。
+   - 增强右侧工具区，集中展示 Backend、Memory、Config 与 Session Tools。
+   - 长文本区域保持滚动和换行。
+   - 新增区域均设置 no-drag。
+
+4. Stage 8.4
+   - 后端新增 GET /config/status。
+   - 前端新增 Config Status 面板。
+   - 显示模型、Ollama URL、上下文开关和 Memory Limit。
+
+5. Stage 8.5
+   - 完成最终全链路接口验收。
+   - 已生成本文件。
+   - 已生成 Atlas_Stage8_release_备份命令.bat。
+
+三、最终测试结果
+
+1. 后端语法检查
+   - 命令：python -m py_compile orchestrator_v0.py
+   - 结果：通过
+
+2. 前端类型检查
+   - 命令：npx tsc -p tsconfig.electron.json
+   - 结果：通过
+
+3. 前端页面
+   - 地址：http://127.0.0.1:54321
+   - 结果：HTTP 200
+
+4. API 文档与接口
+   - /blackboard：存在
+   - /config/status：存在
+   - /ask：存在
+   - /ask_image：存在
+   - /ask_audio：存在
+   - /mock/start：存在
+   - /mock/answer：存在
+   - /mock/state：存在
+   - /report/session：存在
+   - /report/export_markdown：存在
+   - /blackboard/clear_history：存在
+   - /blackboard/reset_session：存在
+
+5. 配置状态
+   - Model：qwen2.5:7b
+   - Use Ollama：true
+   - Use Resume Context：true
+   - Use JD Context：true
+   - Use Knowledge Context：true
+   - Memory Limit：3
+   - 结果：通过
+
+6. 文本输入 /ask
+   - 问题：Why are you a good fit for this role?
+   - source：manual_input
+   - answer_source：ollama
+   - model：qwen2.5:7b
+   - fallback：false
+   - resume_loaded：true
+   - jd_loaded：true
+   - knowledge_loaded：true
+   - match_score：1.0
+   - critic final_score：82
+   - Human-like Rewrite：出现
+   - Follow-up Questions：5 条
+   - 结果：通过
+
+7. Memory
+   - 问题：What was the hardest part?
+   - recent_context_used：true
+   - 结果：通过
+
+8. RAG
+   - 问题：How does the Blackboard work?
+   - rag_used：true
+   - snippets：1
+   - 结果：通过
+
+9. 截图 OCR /ask_image
+   - source：ocr
+   - final_score：75
+   - 结果：通过
+   - 备注：OCR 将 “AI” 识别为 “Al”，属于 OCR 识别误差，链路本身正常。
+
+10. 语音 /ask_audio
+    - source：stt
+    - final_score：82
+    - 结果：通过
+
+11. Mock Interview
+    - Start：成功
+    - Submit 一轮回答：成功
+    - feedback score：78
+    - next_question：存在
+    - 结果：通过
+
+12. Interview Report
+    - overall_score：76
+    - question_reviews：6
+    - 结果：通过
+
+13. Export Report
+    - Markdown 标题：# Atlas Interview Report
+    - 结果：通过
+
+14. Clear History
+    - 清理前 history：6
+    - 清理后 history：0
+    - 结果：通过
+
+15. Reset Session
+    - reset 后 history：0
+    - reset 后再次 /ask：成功
+    - 结果：通过
+
+四、启动方式
+
+双击：
+
+   C:\Users\hp\Desktop\start-all.bat
+
+常用地址：
+
+   前端：http://127.0.0.1:54321
+   后端文档：http://127.0.0.1:8000/docs
+   Blackboard：http://127.0.0.1:8000/blackboard
+   Config：http://127.0.0.1:8000/config/status
+   Export：http://127.0.0.1:8000/report/export_markdown
+
+五、已知问题
+
+1. PowerShell 中文输出可能乱码，这是终端编码问题，不代表系统错误。
+2. OCR 可能把部分英文字符识别错，例如 AI -> Al，需要演示时选择清晰字体和较大字号。
+3. Whisper 首次加载 faster-whisper 模型较慢，首次语音测试需要等待。
+4. 前端部分历史中文文案存在乱码，但功能链路和接口数据正常。后续若要正式展示中文 UI，建议单独做一次 UI 文案编码清理。
+
+六、后续优化建议
+
+1. 清理前端历史乱码文案，统一中文 UI。
+2. 为 OCR 增加更强的后处理纠错，例如 AI / API / OCR 常见误识别。
+3. 为 Whisper 增加录音时长、音量提示和超时提示。
+4. 后续如需更强 RAG，可再引入轻量向量检索，但当前 Stage 8 不建议继续加复杂度。
+5. 如果演示机器性能较弱，可将 ATLAS_WHISPER_MODEL 设置为 tiny。
+
+七、封版结论
+
+Stage 8 产品化整理 + 稳定性加固已完成。
+当前版本可作为稳定演示版使用。
+

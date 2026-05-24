@@ -1,0 +1,124 @@
+Atlas 演示脚本
+
+一、启动
+
+1. 双击 C:\Users\hp\Desktop\start-all.bat
+2. 打开后端文档：http://127.0.0.1:8000/docs
+3. 打开前端页面：http://127.0.0.1:54321
+
+二、展示上下文已加载
+
+1. 在 Electron 页面右侧状态区查看：
+   - LLM Status
+   - Resume Status
+   - JD Status
+   - Knowledge Status
+   - Resume-JD Match
+   - RAG Status
+
+2. 确认：
+   - LLM Source = ollama 或 fallback
+   - Model = qwen2.5:7b
+   - Resume Context = loaded
+   - JD Context = loaded
+   - Knowledge Context = loaded
+
+三、截图输入演示
+
+1. 在记事本中写入：
+
+   Design a local AI interview assistant system.
+
+2. 点击 Electron 页面中的“截图并发送到本地 Orchestrator”。
+3. 展示回答内容。
+4. 展示 Blackboard History 新增 source = ocr 的记录。
+5. 展示 LLM Status、Resume Status、JD Status、Knowledge Status 和 Resume-JD Match。
+
+四、Critic 与口语化改写演示
+
+1. 在 History / Critic Review 中展示：
+   - Final Score
+   - JD Alignment
+   - Main Weakness
+   - Specific Issues
+   - Rewrite Strategy
+   - Should Rewrite
+
+2. 展示 Human-like Rewrite：
+   - Speaking Version
+   - 30s Short Version
+   - Rewrite Notes
+
+五、连续追问与记忆演示
+
+1. 文本输入：
+
+   Tell me about a project you are proud of.
+
+2. 再输入：
+
+   What was the hardest part?
+
+3. 展示 Memory Status = used，说明系统能参考最近问答上下文。
+4. 展示 Likely Follow-ups 追问预测。
+
+六、RAG 演示
+
+1. 文本输入：
+
+   How does the Blackboard work?
+
+2. 展示 RAG Status：
+   - RAG = used
+   - Snippets > 0
+   - Keywords 有匹配词
+
+七、Mock Interview 演示
+
+1. 点击 Start Mock Interview。
+2. 展示第 1 题：
+
+   Tell me about yourself and your main project.
+
+3. 输入一段回答，例如：
+
+   I built Atlas with FastAPI, Electron, React, Ollama, Whisper, OCR, Blackboard and Critic Agent.
+
+4. 点击 Submit Answer。
+5. 展示 Round Feedback 和下一题。
+
+八、Interview Report 演示
+
+1. 点击 Generate Report。
+2. 展示：
+   - Overall Score
+   - Strengths
+   - Weaknesses
+   - Recommended Practice
+   - Question Reviews
+
+3. 点击 Export Report。
+4. 展示 Markdown 报告内容，或打开：
+
+   http://127.0.0.1:8000/report/export_markdown
+
+九、清理与重置演示
+
+1. 点击 Clear History，确认 History 清空。
+2. 点击 Reset Session，确认状态恢复初始。
+3. 再发送一个简单问题，证明 /ask 仍然可用：
+
+   Explain binary search.
+
+十、收尾说明
+
+本演示版重点体现：
+
+1. 文本、截图、语音三输入链路。
+2. 本地 Ollama + fallback 稳定机制。
+3. Resume / JD / Knowledge 上下文注入。
+4. RAG、记忆、追问预测。
+5. Critic 增强评审和口语化改写。
+6. Mock Interview 与复盘报告。
+7. Blackboard 可观测性与状态面板。
+

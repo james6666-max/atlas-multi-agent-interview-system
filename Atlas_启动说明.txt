@@ -1,0 +1,115 @@
+Atlas 启动说明
+
+一、启动前确认
+
+1. 确认 Ollama 已安装并正在运行。
+2. 当前本地模型：qwen2.5:7b
+3. 可用以下命令检查模型：
+
+   ollama list
+
+4. 如果模型不存在，可执行：
+
+   ollama pull qwen2.5:7b
+
+二、一键启动
+
+双击桌面文件：
+
+   C:\Users\hp\Desktop\start-all.bat
+
+该脚本会启动或检查：
+
+1. FastAPI 后端：http://127.0.0.1:8000
+2. Vite + Electron 前端：http://127.0.0.1:54321
+
+注意：npx vite 当前会自动启动 Electron，不要额外手动运行 npx electron，否则可能出现两个窗口。
+
+三、常用地址
+
+后端 API 文档：
+
+   http://127.0.0.1:8000/docs
+
+前端页面：
+
+   http://127.0.0.1:54321
+
+Blackboard 状态：
+
+   http://127.0.0.1:8000/blackboard
+
+Markdown 报告导出：
+
+   http://127.0.0.1:8000/report/export_markdown
+
+四、核心文件位置
+
+后端项目：
+
+   C:\Users\hp\Desktop\blackboard_day5_7
+
+前端项目：
+
+   C:\Users\hp\Desktop\interview-assistant-stage4-whisper
+
+简历上下文：
+
+   C:\Users\hp\Desktop\blackboard_day5_7\resume.txt
+
+岗位 JD 上下文：
+
+   C:\Users\hp\Desktop\blackboard_day5_7\jd.txt
+
+知识库上下文：
+
+   C:\Users\hp\Desktop\blackboard_day5_7\knowledge.txt
+
+五、常见问题
+
+1. 8000 端口被占用
+
+   netstat -ano | findstr :8000
+   taskkill /PID 对应PID /F
+
+2. 54321 端口被占用
+
+   taskkill /IM node.exe /F
+
+3. Ollama 未启动或不可用
+
+   先启动 Ollama，然后检查：
+
+   ollama list
+   ollama run qwen2.5:7b
+
+   如果 Ollama 仍不可用，系统会 fallback 到规则模板回答，前端 LLM Status 会显示 Fallback。
+
+4. PowerShell 中文乱码
+
+   这是终端编码显示问题，不代表后端错误。以 Electron 页面、浏览器 /blackboard 和接口 JSON 为准。
+
+5. resume.txt 缺失
+
+   Resume Status 会显示 missing，系统不会崩溃，但回答不再使用简历上下文。恢复文件后重启后端即可。
+
+6. jd.txt 缺失
+
+   JD Status 会显示 missing，Resume-JD Match 会降低或显示缺失原因。恢复文件后重启后端即可。
+
+7. knowledge.txt 缺失
+
+   Knowledge Status 会显示 missing，RAG 可能 unused，但基础问答仍可用。恢复文件后重启后端即可。
+
+六、基础检查命令
+
+后端语法检查：
+
+   cd C:\Users\hp\Desktop\blackboard_day5_7
+   python -m py_compile orchestrator_v0.py
+
+前端类型检查：
+
+   cd C:\Users\hp\Desktop\interview-assistant-stage4-whisper
+   npx tsc -p tsconfig.electron.json
+
