@@ -2,7 +2,7 @@ Atlas 演示脚本
 
 一、启动
 
-1. 双击 C:\Users\hp\Desktop\start-all.bat
+1. 双击 D:\atlas-multi-agent-interview-system\start-all.bat
 2. 打开后端文档：http://127.0.0.1:8000/docs
 3. 打开前端页面：http://127.0.0.1:54321
 

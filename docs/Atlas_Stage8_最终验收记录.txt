@@ -160,7 +160,7 @@ Atlas Stage 8 最终验收记录
 
 双击：
 
-   C:\Users\hp\Desktop\start-all.bat
+   D:\atlas-multi-agent-interview-system\start-all.bat
 
 常用地址：
 

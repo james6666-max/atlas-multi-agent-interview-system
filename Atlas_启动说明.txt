@@ -16,7 +16,7 @@ Atlas 启动说明
 
 双击桌面文件：
 
-   C:\Users\hp\Desktop\start-all.bat
+   D:\atlas-multi-agent-interview-system\start-all.bat
 
 该脚本会启动或检查：
 
@@ -47,23 +47,23 @@ Markdown 报告导出：
 
 后端项目：
 
-   C:\Users\hp\Desktop\blackboard_day5_7
+   D:\atlas-multi-agent-interview-system\blackboard_day5_7
 
 前端项目：
 
-   C:\Users\hp\Desktop\interview-assistant-stage4-whisper
+   D:\atlas-multi-agent-interview-system\interview-assistant-stage4-whisper
 
 简历上下文：
 
-   C:\Users\hp\Desktop\blackboard_day5_7\resume.txt
+   D:\atlas-multi-agent-interview-system\blackboard_day5_7\resume.txt
 
 岗位 JD 上下文：
 
-   C:\Users\hp\Desktop\blackboard_day5_7\jd.txt
+   D:\atlas-multi-agent-interview-system\blackboard_day5_7\jd.txt
 
 知识库上下文：
 
-   C:\Users\hp\Desktop\blackboard_day5_7\knowledge.txt
+   D:\atlas-multi-agent-interview-system\blackboard_day5_7\knowledge.txt
 
 五、常见问题
 
@@ -105,11 +105,11 @@ Markdown 报告导出：
 
 后端语法检查：
 
-   cd C:\Users\hp\Desktop\blackboard_day5_7
-   python -m py_compile orchestrator_v0.py
+   cd D:\atlas-multi-agent-interview-system\blackboard_day5_7
+   conda run -n chuangxin python -m py_compile orchestrator_v0.py
 
 前端类型检查：
 
-   cd C:\Users\hp\Desktop\interview-assistant-stage4-whisper
+   cd D:\atlas-multi-agent-interview-system\interview-assistant-stage4-whisper
    npx tsc -p tsconfig.electron.json
 

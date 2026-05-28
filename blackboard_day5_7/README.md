@@ -2,17 +2,17 @@
 
 ## 1. Install dependencies
 ```bash
-pip install -r requirements.txt
+conda run -n chuangxin python -m pip install -r requirements.txt
 ```
 
 ## 2. Validate read/write locally
 ```bash
-python test_blackboard.py
+conda run -n chuangxin python test_blackboard.py
 ```
 
 ## 3. Start Orchestrator v0
 ```bash
-uvicorn orchestrator_v0:app --reload --port 8000
+conda run -n chuangxin python -m uvicorn orchestrator_v0:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ## 4. Test with curl

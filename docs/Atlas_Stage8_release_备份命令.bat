@@ -1,5 +1,6 @@
 @echo off
-cd /d C:\Users\hp\Desktop
+set "ROOT=%~dp0.."
+cd /d "%ROOT%"
 echo Backing up Atlas Stage 8 release version...
 echo.
 echo This may take a while if node_modules is included.
