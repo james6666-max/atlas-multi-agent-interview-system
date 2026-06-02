@@ -1,0 +1,8 @@
+Atlas 项目知识库：
+1. 系统采用 FastAPI 后端、Electron + React 前端。
+2. 输入链路包括文本、截图 OCR、Whisper 语音。
+3. Blackboard 是系统的共享状态中心，用于记录 current_question、agent_state、history 和 version。
+4. Ollama qwen2.5:7b 用于本地回答生成。
+5. Critic Agent 用于回答评分、JD 匹配、隐私风险检测。
+6. Resume Context 和 JD Context 用于个性化回答。
+7. 后续可扩展 RAG、模拟面试和复盘报告。

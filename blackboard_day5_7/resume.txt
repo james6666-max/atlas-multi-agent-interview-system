@@ -1,0 +1,24 @@
+候选人背景：
+我正在开发一个名为 Atlas 的多智能体 AI 面试系统，目标是构建一个本地优先、支持多输入方式、可观测的 AI 面试辅助工具。
+
+技术方向：
+后端开发、AI 应用开发、Electron 桌面应用、FastAPI 后端、React 前端、本地大模型、语音识别、OCR、多智能体系统。
+
+项目经历：
+1. Atlas 多智能体 AI 面试系统
+使用 FastAPI、Electron、React、TypeScript、Whisper、RapidOCR、Ollama 和 Blackboard，实现文本输入、截图 OCR 输入、语音输入三种面试问题采集方式。
+系统支持 /ask、/ask_image、/ask_audio 和 /blackboard 接口，可以将问题、题型、Agent 状态、回答、Critic Review 和历史记录写入 Blackboard。
+
+2. 本地化 AI 面试助手原型
+接入本地 Ollama qwen2.5:7b，实现本地大模型回答生成；接入 faster-whisper 实现本地语音转文字；接入 RapidOCR 实现截图文字识别。
+系统强调本地优先、隐私保护、fallback 机制和可观测性。
+
+3. Critic Agent 规则评审模块
+实现规则版 Critic Agent，对回答进行清晰度、正确性、人类口吻、简历一致性和隐私风险评分，并在前端展示 Critic Review。
+
+技能：
+Python、FastAPI、React、Electron、TypeScript、Ollama、Whisper、OCR、系统设计、前后端联调、Windows 本地开发。
+
+回答要求：
+如果遇到行为面试题，可以优先围绕 Atlas 项目、本地化 AI 工具、多智能体架构、前后端联调、调试排错、隐私保护等经历展开。
+不要编造不存在的公司、实习、获奖、论文或商业上线经历。

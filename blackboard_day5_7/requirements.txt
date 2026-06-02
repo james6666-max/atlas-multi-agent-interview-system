@@ -1,0 +1,10 @@
+fastapi==0.115.6
+uvicorn==0.34.0
+pydantic==2.10.4
+jsonschema==4.23.0
+requests
+rapidocr-onnxruntime
+pillow
+faster-whisper
+python-multipart
+pypdf

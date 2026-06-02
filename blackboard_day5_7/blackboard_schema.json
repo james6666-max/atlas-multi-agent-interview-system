@@ -1,0 +1,512 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Interview Multi-Agent Blackboard",
+  "type": "object",
+  "required": [
+    "session_id",
+    "version",
+    "updated_at",
+    "current_question",
+    "history",
+    "resume_context",
+    "company_context",
+    "agent_state"
+  ],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "updated_at": {
+      "type": "integer"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "practice",
+        "live_copilot",
+        "review"
+      ],
+      "default": "practice"
+    },
+    "current_question": {
+      "type": "object",
+      "required": [
+        "text",
+        "type",
+        "timestamp",
+        "source"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "Technical/Algorithm",
+            "System Design",
+            "Behavioral",
+            "Resume Follow-up",
+            "Unknown"
+          ]
+        },
+        "language": {
+          "type": "string",
+          "enum": [
+            "Chinese",
+            "English",
+            "Mixed",
+            "Unknown"
+          ]
+        },
+        "timestamp": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "stt",
+            "ocr",
+            "manual_input",
+            "imported"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "rolling_context": {
+      "type": "object",
+      "properties": {
+        "recent_transcript": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "speaker",
+              "text",
+              "timestamp"
+            ],
+            "properties": {
+              "speaker": {
+                "type": "string",
+                "enum": [
+                  "interviewer",
+                  "candidate",
+                  "system",
+                  "unknown"
+                ]
+              },
+              "text": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "open_threads": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "turn_id",
+          "question",
+          "answer",
+          "agent",
+          "timestamp",
+          "source"
+        ],
+        "properties": {
+          "turn_id": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "question_type": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "stt",
+              "ocr",
+              "manual_input",
+              "imported"
+            ]
+          },
+          "critic": {
+            "type": "object",
+            "properties": {
+              "clarity_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "correctness_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "human_like_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "resume_alignment_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "privacy_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "jd_alignment_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "jd_alignment_notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "final_score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "main_weakness": {
+                "type": "string"
+              },
+              "specific_issues": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rewrite_strategy": {
+                "type": "string"
+              },
+              "should_rewrite": {
+                "type": "boolean"
+              },
+              "human_like_rewrite": {
+                "type": "object"
+              },
+              "followup_questions": {
+                "type": "object"
+              },
+              "critic_notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "improved_answer_suggestion": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "resume_context": {
+      "type": "object",
+      "required": [
+        "candidate_name",
+        "skills",
+        "projects",
+        "strengths",
+        "weaknesses",
+        "star_stories"
+      ],
+      "properties": {
+        "candidate_name": {
+          "type": "string"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "description",
+              "tech_stack",
+              "highlights"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "tech_stack": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "highlights": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "strengths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "weaknesses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "star_stories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "title",
+              "situation",
+              "task",
+              "action",
+              "result"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "situation": {
+                "type": "string"
+              },
+              "task": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string"
+              },
+              "result": {
+                "type": "string"
+              },
+              "related_skills": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "company_context": {
+      "type": "object",
+      "properties": {
+        "company_name": {
+          "type": "string"
+        },
+        "job_title": {
+          "type": "string"
+        },
+        "jd_text": {
+          "type": "string"
+        },
+        "required_skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nice_to_have_skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "interview_stage": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rag_context": {
+      "type": "object",
+      "properties": {
+        "retrieved_chunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "source",
+              "content",
+              "score"
+            ],
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              },
+              "metadata": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "agent_state": {
+      "type": "object",
+      "properties": {
+        "Perception": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Resume": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Tech/Code": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Behavioral": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "RAG": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Critic": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Coaching": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Negotiation": {
+          "$ref": "#/$defs/agentStatus"
+        },
+        "Stealth/Privacy Guardian": {
+          "$ref": "#/$defs/agentStatus"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/agentStatus"
+      }
+    },
+    "privacy_flags": {
+      "type": "object",
+      "properties": {
+        "allow_cloud_llm": {
+          "type": "boolean"
+        },
+        "allow_web_search": {
+          "type": "boolean"
+        },
+        "redact_pii": {
+          "type": "boolean"
+        },
+        "local_only": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "agentStatus": {
+      "type": "object",
+      "required": [
+        "status",
+        "last_response",
+        "last_updated"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "running",
+            "done",
+            "error"
+          ]
+        },
+        "last_response": {
+          "type": "string"
+        },
+        "last_error": {
+          "type": "string"
+        },
+        "last_updated": {
+          "type": "integer"
+        },
+        "metadata": {
+          "type": "object"
+        },
+        "meta": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
