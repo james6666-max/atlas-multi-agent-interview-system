@@ -22,11 +22,35 @@ def load_knowledge_text(base_dir: Path | None = None) -> str:
         return ""
 
 
+# Very common Chinese function-word bigrams \u2014 dropped to cut retrieval noise.
+_CN_STOP_BIGRAMS = {
+    "\u5982\u4f55", "\u4ec0\u4e48", "\u600e\u4e48", "\u4e3a\u4ec0", "\u4ec0\u4e48", "\u53ef\u4ee5", "\u4e00\u4e2a", "\u6211\u4eec", "\u4f60\u4eec",
+    "\u8bf7\u95ee", "\u4ee5\u53ca", "\u6216\u8005", "\u5e76\u4e14", "\u8fd9\u4e2a", "\u90a3\u4e2a", "\u54ea\u4e9b", "\u600e\u6837", "\u8fdb\u884c",
+    "\u4e00\u4e0b", "\u6709\u6ca1", "\u6ca1\u6709", "\u662f\u5426", "\u9700\u8981", "\u5e94\u8be5", "\u53ef\u80fd", "\u4e4b\u95f4", "\u5173\u4e8e",
+}
+
+
+def _chinese_bigrams(run: str) -> List[str]:
+    """Decompose a Chinese run into overlapping 2-char grams (CJK substring matching).
+
+    e.g. "\u77ed\u94fe\u63a5\u7cfb\u7edf" -> ["\u77ed\u94fe", "\u94fe\u63a5", "\u63a5\u7cfb", "\u7cfb\u7edf"].
+    This is the key to Chinese recall: matching whole runs almost never hits,
+    but bigrams overlap with how the knowledge base actually phrases things.
+    """
+    if len(run) < 2:
+        return []
+    grams = [run[i : i + 2] for i in range(len(run) - 1)]
+    return [gram for gram in grams if gram not in _CN_STOP_BIGRAMS]
+
+
 def extract_query_terms(question: str) -> List[str]:
     lowered = (question or "").lower()
     terms: list[str] = []
+    # English / alphanumeric tokens (len >= 2).
     terms.extend(re.findall(r"[a-zA-Z][a-zA-Z0-9_+#.-]{1,}", lowered))
-    terms.extend(re.findall(r"[\u4e00-\u9fff]{2,}", lowered))
+    # Chinese: split into runs, then into overlapping bigrams.
+    for run in re.findall(r"[\u4e00-\u9fff]+", lowered):
+        terms.extend(_chinese_bigrams(run))
 
     expanded: list[str] = []
     for term in terms:
