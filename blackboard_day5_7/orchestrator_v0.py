@@ -4,17 +4,35 @@ import time
 import tempfile
 import os
 import re
+import json
 import requests
+import asyncio
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
+from uuid import uuid4
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from rapidocr_onnxruntime import RapidOCR
+from fastapi.responses import StreamingResponse
+# NOTE: rapidocr_onnxruntime / faster_whisper are imported lazily inside their
+# getters (get_ocr_engine / get_whisper_model) so the heavy onnxruntime /
+# ctranslate2 / cv2 DLLs do NOT load at startup — the server boots in seconds.
 from pydantic import BaseModel
 
+from app.adapters.phase1_pipeline import configure_phase1_pipeline
+from app.agents.perception_agent import classify_interview_input
+from app.blackboard.events import BBEvent, EventType
+from app.coaching.models import AnswerRequest, StartRequest
+from app.coaching.service import CoachingService
+from app.critic.rules import review_answer
+from app.llm.config import LLMConfig, load_config, save_settings
+from app.llm.router import LLMRouter, build_router
+from app.orchestrator.factory import create_phase2_runtime
+from app.paths import data_dir, ensure_seed_files, resource_dir
+from app.rag.local_rag import load_knowledge_text, retrieve_local_knowledge
+from app.resume.context_loader import build_candidate_context
 from blackboard_store import BlackboardStore
-from faster_whisper import WhisperModel
 
 app = FastAPI(title="Orchestrator v0 - Blackboard Demo")
 app.add_middleware(
@@ -24,7 +42,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-store = BlackboardStore(data_path="blackboard_instance.json", schema_path="blackboard_schema.json")
+# Seed writable data dir with bundled defaults on first launch (no-op in dev).
+ensure_seed_files([
+    "blackboard_instance.json",
+    "blackboard_schema.json",
+    "resume.txt",
+    "jd.txt",
+    "knowledge.txt",
+])
+store = BlackboardStore(
+    data_path=str(data_dir() / "blackboard_instance.json"),
+    schema_path=str(resource_dir() / "blackboard_schema.json"),
+)
+phase2_bus, phase2_orchestrator = create_phase2_runtime()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 USE_OLLAMA = os.getenv("USE_OLLAMA", "true").lower() == "true"
@@ -34,6 +64,47 @@ JD_PATH = os.getenv("JD_PATH", "jd.txt")
 USE_JD_CONTEXT = os.getenv("USE_JD_CONTEXT", "true").lower() == "true"
 KNOWLEDGE_PATH = os.getenv("KNOWLEDGE_PATH", "knowledge.txt")
 USE_KNOWLEDGE_CONTEXT = os.getenv("USE_KNOWLEDGE_CONTEXT", "true").lower() == "true"
+
+# Tiered LLM runtime (M1): local Ollama + optional cloud (OpenAI-compatible),
+# hot-reloadable from the Settings UI via /config.
+_llm_config: LLMConfig = load_config()
+_llm_router: LLMRouter = build_router(_llm_config)
+
+
+def get_llm_config() -> LLMConfig:
+    return _llm_config
+
+
+def get_llm_router() -> LLMRouter:
+    return _llm_router
+
+
+def reload_llm() -> LLMConfig:
+    global _llm_config, _llm_router
+    _llm_config = load_config()
+    _llm_router = build_router(_llm_config)
+    return _llm_config
+
+
+def _coaching_llm_generate(prompt: str) -> str:
+    """LLM generator for practice question generation.
+
+    Respects the current runtime config: when no LLM is enabled/configured this
+    raises, and the question bank deterministically falls back to its template
+    plan (keeps eval/smoke and key-less setups fast and offline).
+    """
+    cfg = get_llm_config()
+    if not (cfg.use_ollama or cfg.cloud_configured):
+        raise RuntimeError("LLM disabled; using deterministic question bank")
+    text, _ = get_llm_router().generate(prompt)
+    return text
+
+
+# Coaching / practice loop (M2): turn-based mock interview driven by resume/JD,
+# scored by the same rule-based critic as the live path.
+_coaching_service = CoachingService(llm_generate=_coaching_llm_generate)
+
+
 _whisper_model = None
 _mock_state = {
     "active": False,
@@ -48,6 +119,7 @@ def get_whisper_model():
     global _whisper_model
 
     if _whisper_model is None:
+        from faster_whisper import WhisperModel  # lazy: avoid loading ctranslate2 at startup
         model_name = os.getenv("ATLAS_WHISPER_MODEL", "small")
         # Set ATLAS_WHISPER_MODEL=tiny for faster local startup on weaker CPUs.
         _whisper_model = WhisperModel(
@@ -95,6 +167,7 @@ _ocr_engine = None
 def get_ocr_engine():
     global _ocr_engine
     if _ocr_engine is None:
+        from rapidocr_onnxruntime import RapidOCR  # lazy: avoid loading onnxruntime/cv2 at startup
         _ocr_engine = RapidOCR()
     return _ocr_engine
 
@@ -214,6 +287,11 @@ class MockAnswerRequest(BaseModel):
 
 
 class CriticResult(BaseModel):
+    approved: bool = True
+    score: int = 100
+    issues: list[str] = []
+    suggestions: list[str] = []
+    risk_flags: list[str] = []
     clarity_score: float
     correctness_score: float
     human_like_score: float
@@ -239,6 +317,21 @@ class AskResponse(BaseModel):
     answer: str
     critic: CriticResult
     blackboard_version: int
+    context_used: bool = False
+    context_sources: list[str] = []
+    rag_used: bool = False
+    rag_sources: list[str] = []
+    session_id: str = ""
+
+
+class LLMConfigUpdate(BaseModel):
+    mode: str | None = None
+    use_ollama: bool | None = None
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
+    cloud_base_url: str | None = None
+    cloud_api_key: str | None = None
+    cloud_model: str | None = None
 
 
 def classify_question(question: str) -> str:
@@ -310,7 +403,7 @@ def load_resume_context() -> tuple[str, dict]:
         path = Path(RESUME_PATH)
 
         if not path.is_absolute():
-            path = Path(__file__).parent / path
+            path = data_dir() / path
 
         if not path.exists():
             return "", {
@@ -358,7 +451,7 @@ def load_jd_context() -> tuple[str, dict]:
         path = Path(JD_PATH)
 
         if not path.is_absolute():
-            path = Path(__file__).parent / path
+            path = data_dir() / path
 
         if not path.exists():
             return "", {
@@ -466,7 +559,7 @@ def load_knowledge_context() -> tuple[str, dict]:
     try:
         path = Path(KNOWLEDGE_PATH)
         if not path.is_absolute():
-            path = Path(__file__).parent / path
+            path = data_dir() / path
 
         if not path.exists():
             return "", {
@@ -849,19 +942,19 @@ def generate_human_like_rewrite(
         f"Original answer:\n{answer[:2500]}\n"
     )
     try:
-        if not USE_OLLAMA:
-            raise RuntimeError("USE_OLLAMA is false")
-        rewritten = call_ollama(prompt, model=OLLAMA_MODEL)
+        if not get_llm_config().use_ollama:
+            raise RuntimeError("LLM disabled")
+        rewritten, _ = get_llm_router().generate(prompt)
         parsed = parse_two_section_rewrite(rewritten)
         return {
             "rewrite_available": True,
             "speaking_version": parsed["speaking_version"],
             "short_version": parsed["short_version"],
-            "rewrite_notes": ["Generated by Ollama rewrite prompt."]
+            "rewrite_notes": ["Generated by LLM rewrite prompt."]
         }
     except Exception as error:
         rewrite = fallback_human_like_rewrite(question, answer, question_type, critic)
-        rewrite["rewrite_notes"].append(f"Ollama rewrite fallback: {error}")
+        rewrite["rewrite_notes"].append(f"LLM rewrite fallback: {error}")
         return rewrite
 
 
@@ -933,7 +1026,6 @@ def generate_followup_questions(
 
 
 def generate_llm_answer(question: str, question_type: str, agent: str):
-    model_name = OLLAMA_MODEL
     resume_context, resume_meta = load_resume_context()
     jd_context, jd_meta = load_jd_context()
     knowledge_context, knowledge_meta = load_knowledge_context()
@@ -954,13 +1046,13 @@ def generate_llm_answer(question: str, question_type: str, agent: str):
         "rag_query_keywords": rag_meta.get("query_keywords", [])
     }
 
-    if not USE_OLLAMA:
+    if not get_llm_config().use_ollama:
         fallback_answer = generate_stub_answer(question, question_type, agent)
         return fallback_answer, {
             "answer_source": "stub",
             "model": "none",
             "fallback": True,
-            "error": "USE_OLLAMA is false",
+            "error": "LLM disabled (use_ollama is false)",
             **context_meta
         }
 
@@ -975,29 +1067,21 @@ def generate_llm_answer(question: str, question_type: str, agent: str):
             knowledge_context=knowledge_context,
             rag_snippets=rag_meta.get("snippets", [])
         )
-        answer = call_ollama(prompt, model=model_name)
-
-        if answer:
-            answer = reinforce_resume_context_signals(answer, question, question_type, resume_meta)
-            return answer, {
-                "answer_source": "ollama",
-                "model": model_name,
-                "fallback": False,
-                "error": None,
-                **context_meta
-            }
-
-        fallback_answer = generate_stub_answer(question, question_type, agent)
-        return fallback_answer, {
-            "answer_source": "stub",
-            "model": "none",
-            "fallback": True,
-            "error": "Ollama returned empty response",
+        answer, llm_meta = get_llm_router().generate(prompt)
+        answer = reinforce_resume_context_signals(answer, question, question_type, resume_meta)
+        return answer, {
+            "answer_source": llm_meta.get("provider", "llm"),
+            "model": llm_meta.get("model"),
+            "provider": llm_meta.get("provider"),
+            "is_local": llm_meta.get("is_local"),
+            "fallback": bool(llm_meta.get("fallback_used")),
+            "redactions": llm_meta.get("redactions", {}),
+            "error": None,
             **context_meta
         }
 
     except Exception as error:
-        print("Ollama failed, fallback to stub:", error)
+        print("LLM failed, fallback to stub:", error)
 
         fallback_answer = generate_stub_answer(question, question_type, agent)
         return fallback_answer, {
@@ -1316,6 +1400,33 @@ def critic_review(
     }
 
 
+# Keys allowed by blackboard_schema.json -> history.items.critic (additionalProperties: false).
+# review_answer() also returns gate-only keys (approved/score/issues/...) that are valid in the
+# API response but must be stripped before persisting to the strictly-validated history entry.
+_HISTORY_CRITIC_KEYS = {
+    "clarity_score",
+    "correctness_score",
+    "human_like_score",
+    "resume_alignment_score",
+    "privacy_score",
+    "jd_alignment_score",
+    "jd_alignment_notes",
+    "final_score",
+    "main_weakness",
+    "specific_issues",
+    "rewrite_strategy",
+    "should_rewrite",
+    "human_like_rewrite",
+    "followup_questions",
+    "critic_notes",
+    "improved_answer_suggestion",
+}
+
+
+def _critic_for_history(critic: dict) -> dict:
+    return {key: value for key, value in critic.items() if key in _HISTORY_CRITIC_KEYS}
+
+
 @app.get("/blackboard")
 def read_blackboard():
     return store.read()
@@ -1323,93 +1434,666 @@ def read_blackboard():
 
 @app.get("/config/status")
 def config_status():
+    cfg = get_llm_config()
     return {
-        "ollama_model": OLLAMA_MODEL,
-        "ollama_base_url": OLLAMA_BASE_URL,
-        "use_ollama": USE_OLLAMA,
+        "ollama_model": cfg.ollama_model,
+        "ollama_base_url": cfg.ollama_base_url,
+        "use_ollama": cfg.use_ollama,
+        "llm": cfg.public_dict(),
         "use_resume_context": USE_RESUME_CONTEXT,
-        "resume_path": str((Path(__file__).parent / RESUME_PATH).resolve()) if not Path(RESUME_PATH).is_absolute() else RESUME_PATH,
+        "resume_path": str((data_dir() / RESUME_PATH).resolve()) if not Path(RESUME_PATH).is_absolute() else RESUME_PATH,
         "use_jd_context": USE_JD_CONTEXT,
-        "jd_path": str((Path(__file__).parent / JD_PATH).resolve()) if not Path(JD_PATH).is_absolute() else JD_PATH,
+        "jd_path": str((data_dir() / JD_PATH).resolve()) if not Path(JD_PATH).is_absolute() else JD_PATH,
         "use_knowledge_context": USE_KNOWLEDGE_CONTEXT,
-        "knowledge_path": str((Path(__file__).parent / KNOWLEDGE_PATH).resolve()) if not Path(KNOWLEDGE_PATH).is_absolute() else KNOWLEDGE_PATH,
+        "knowledge_path": str((data_dir() / KNOWLEDGE_PATH).resolve()) if not Path(KNOWLEDGE_PATH).is_absolute() else KNOWLEDGE_PATH,
         "memory_limit": 3,
         "backend_url": "http://127.0.0.1:8000"
     }
 
 
-@app.post("/ask", response_model=AskResponse)
-def ask(req: AskRequest):
-    question_type = classify_question(req.question)
-    selected_agent = select_agent(question_type)
+@app.get("/config/llm")
+def get_llm_settings():
+    """Effective LLM config (api key never returned, only whether it is set)."""
+    return get_llm_config().public_dict()
 
-    store.update_current_question(req.question, question_type, req.language, req.source, 0.85)
-    store.update_agent_state("Perception", "done", f"Detected question type: {question_type}", {"selected_agent": selected_agent})
+
+@app.post("/config/llm")
+def update_llm_settings(update: LLMConfigUpdate):
+    """Persist LLM settings (Settings UI) and hot-reload the router."""
+    updates = {key: value for key, value in update.model_dump().items() if value is not None}
+    save_settings(updates)
+    cfg = reload_llm()
+    return cfg.public_dict()
+
+
+@app.post("/config/llm/test")
+def test_llm_connection():
+    """Actually call the configured LLM once and report which provider answered.
+
+    This is the ground truth for "is the cloud API really being used": with a
+    valid cloud key it returns provider="cloud"; if cloud fails it falls back to
+    local and reports fallback_used=true; if nothing works, ok=false.
+    """
+    start = time.perf_counter()
+    try:
+        text, meta = get_llm_router().generate("Reply with exactly: OK", timeout=20)
+        return {
+            "ok": True,
+            "provider": meta.get("provider"),
+            "model": meta.get("model"),
+            "is_local": meta.get("is_local"),
+            "fallback_used": bool(meta.get("fallback_used")),
+            "latency_ms": int((time.perf_counter() - start) * 1000),
+            "sample": (text or "")[:80],
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+            "latency_ms": int((time.perf_counter() - start) * 1000),
+        }
+
+
+class ProfileUpdate(BaseModel):
+    resume: str | None = None
+    jd: str | None = None
+    knowledge: str | None = None
+    company: str | None = None
+    position: str | None = None
+    focus: str | None = None
+
+
+@app.get("/profile")
+def get_profile():
+    """Candidate prep: resume / JD / knowledge text + target company/position/focus."""
+    from app.profile_store import read_all
+    return read_all()
+
+
+@app.post("/profile")
+def save_profile(update: ProfileUpdate):
+    from app.profile_store import save_all
+    return save_all(update.model_dump())
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    import io
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise RuntimeError("PDF parsing needs the 'pypdf' package (pip install pypdf)") from exc
+    reader = PdfReader(io.BytesIO(data))
+    parts = [(page.extract_text() or "").strip() for page in reader.pages]
+    return "\n\n".join(part for part in parts if part)
+
+
+def _extract_docx_text(data: bytes) -> str:
+    import io
+    try:
+        import docx  # python-docx
+    except ImportError as exc:
+        raise RuntimeError("DOCX parsing needs 'python-docx'; upload PDF/TXT or paste text instead") from exc
+    document = docx.Document(io.BytesIO(data))
+    return "\n".join(p.text for p in document.paragraphs if p.text.strip())
+
+
+@app.post("/profile/parse_file")
+async def parse_profile_file(file: UploadFile = File(...)):
+    """Extract plain text from an uploaded resume/JD file (txt/md/pdf/docx)."""
+    name = (file.filename or "").lower()
+    content = await file.read()
+    try:
+        if name.endswith(".pdf"):
+            text = _extract_pdf_text(content)
+        elif name.endswith(".docx"):
+            text = _extract_docx_text(content)
+        else:
+            text = content.decode("utf-8", errors="replace")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}")
+
+    text = text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="No text could be extracted from the file.")
+    return {"text": text, "chars": len(text), "filename": file.filename}
+
+
+@app.get("/trace/{session_id}")
+def get_trace(session_id: str):
+    """Real per-request agent trace: the ordered event stream from the bus.
+
+    The /ask response returns its session_id; the UI fetches the trace here
+    instead of inferring agent steps from response fields.
+    """
+    events = phase2_bus.dump_session_json(session_id)
+    steps = [
+        {
+            "ts": event.get("ts"),
+            "source_agent": event.get("source_agent"),
+            "type": event.get("type"),
+            "question_type": (event.get("payload") or {}).get("question_type"),
+            "parent_event_id": event.get("parent_event_id"),
+            "event_id": event.get("event_id"),
+        }
+        for event in events
+    ]
+    return {"session_id": session_id, "count": len(steps), "steps": steps, "events": events}
+
+
+def _run_async_blocking(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(lambda: asyncio.run(coro)).result()
+
+
+def _phase2_question_type_to_phase1(question_type: str | None) -> str | None:
+    mapping = {
+        "technical": "Technical/Algorithm",
+        "algorithm": "Technical/Algorithm",
+        "system_design": "System Design",
+        "behavioral": "Behavioral",
+        "resume_followup": "Behavioral",
+    }
+    if not question_type:
+        return None
+    return mapping.get(str(question_type).lower())
+
+
+def _agent_hint_to_selected_agent(agent_hint: str | None) -> str | None:
+    mapping = {
+        "tech": "Tech/Code",
+        "technical": "Tech/Code",
+        "code": "Tech/Code",
+        "behavioral": "Behavioral",
+        "resume": "Behavioral",
+    }
+    if not agent_hint:
+        return None
+    return mapping.get(str(agent_hint).lower())
+
+
+def _run_phase1_answer_pipeline_sync(
+    question: str,
+    language: str = "Unknown",
+    source: str = "manual_input",
+    agent_hint: str | None = None,
+    question_type: str | None = None,
+    context: dict | None = None,
+    rag: dict | None = None,
+) -> dict:
+    phase1_question_type = _phase2_question_type_to_phase1(question_type) or classify_question(question)
+    selected_agent = _agent_hint_to_selected_agent(agent_hint) or select_agent(phase1_question_type)
+
+    store.update_current_question(question, phase1_question_type, language, source, 0.85)
+    store.update_agent_state("Perception", "done", f"Detected question type: {phase1_question_type}", {"selected_agent": selected_agent})
     store.update_agent_state(selected_agent, "running", "Generating answer...", {"started_at": int(time.time())})
 
-    answer, answer_meta = generate_llm_answer(req.question, question_type, selected_agent)
-    
+    answer, answer_meta = generate_llm_answer(question, phase1_question_type, selected_agent)
+
     store.update_agent_state(
-    selected_agent,
-    "done",
-    answer,
-    {
-    "question_type": question_type,
-    "answer_source": answer_meta.get("answer_source"),
-    "model": answer_meta.get("model"),
-    "fallback": answer_meta.get("fallback"),
-    "llm_error": answer_meta.get("error"),
-    "resume_context_loaded": answer_meta.get("resume_context_loaded"),
-    "resume_path": answer_meta.get("resume_path"),
-    "resume_error": answer_meta.get("resume_error"),
-    "jd_context_loaded": answer_meta.get("jd_context_loaded"),
-    "jd_path": answer_meta.get("jd_path"),
-    "jd_error": answer_meta.get("jd_error"),
-    "resume_jd_match": answer_meta.get("resume_jd_match"),
-    "knowledge_context_loaded": answer_meta.get("knowledge_context_loaded"),
-    "knowledge_path": answer_meta.get("knowledge_path"),
-    "knowledge_error": answer_meta.get("knowledge_error"),
-    "recent_context_used": answer_meta.get("recent_context_used"),
-    "rag_used": answer_meta.get("rag_used"),
-    "rag_snippets_count": answer_meta.get("rag_snippets_count"),
-    "rag_query_keywords": answer_meta.get("rag_query_keywords")
-}
-)
-    
-    critic = critic_review(
-        req.question,
+        selected_agent,
+        "done",
         answer,
-        question_type,
-        resume_context=answer_meta.get("resume_context", ""),
-        jd_context=answer_meta.get("jd_context", "")
+        {
+            "question_type": phase1_question_type,
+            "answer_source": answer_meta.get("answer_source"),
+            "model": answer_meta.get("model"),
+            "fallback": answer_meta.get("fallback"),
+            "llm_error": answer_meta.get("error"),
+            "resume_context_loaded": answer_meta.get("resume_context_loaded"),
+            "resume_path": answer_meta.get("resume_path"),
+            "resume_error": answer_meta.get("resume_error"),
+            "jd_context_loaded": answer_meta.get("jd_context_loaded"),
+            "jd_path": answer_meta.get("jd_path"),
+            "jd_error": answer_meta.get("jd_error"),
+            "resume_jd_match": answer_meta.get("resume_jd_match"),
+            "knowledge_context_loaded": answer_meta.get("knowledge_context_loaded"),
+            "knowledge_path": answer_meta.get("knowledge_path"),
+            "knowledge_error": answer_meta.get("knowledge_error"),
+            "recent_context_used": answer_meta.get("recent_context_used"),
+            "rag_used": answer_meta.get("rag_used"),
+            "rag_snippets_count": answer_meta.get("rag_snippets_count"),
+            "rag_query_keywords": answer_meta.get("rag_query_keywords")
+        }
     )
-    critic["human_like_rewrite"] = generate_human_like_rewrite(
-        req.question,
-        answer,
-        question_type,
-        critic,
-        resume_context=answer_meta.get("resume_context", ""),
-        jd_context=answer_meta.get("jd_context", "")
+
+    # Phase 2 (a specialized agent invoked this pipeline via agent_hint): the standalone
+    # CriticAgent (app.critic.rules.review_answer) is the single source of truth for the
+    # critic that reaches the response. Reuse that same engine here only to persist a
+    # consistent critic to history / agent_state, and skip the legacy critic_review() plus
+    # the Ollama-backed human_like_rewrite and followup generation, whose output was
+    # previously computed and then discarded by CriticAgent on every Phase 2 request.
+    if agent_hint is not None:
+        critic = review_answer(
+            question=question,
+            answer=answer,
+            question_type=str(question_type or phase1_question_type or "").lower(),
+            selected_agent=selected_agent,
+            context=context or {},
+            rag=rag or {},
+        )
+        store.update_agent_state("Critic", "done", "Review completed", critic)
+        updated = store.append_history(
+            question,
+            answer,
+            selected_agent,
+            phase1_question_type,
+            _critic_for_history(critic),
+            source,
+        )
+    else:
+        critic = critic_review(
+            question,
+            answer,
+            phase1_question_type,
+            resume_context=answer_meta.get("resume_context", ""),
+            jd_context=answer_meta.get("jd_context", "")
+        )
+        critic["human_like_rewrite"] = generate_human_like_rewrite(
+            question,
+            answer,
+            phase1_question_type,
+            critic,
+            resume_context=answer_meta.get("resume_context", ""),
+            jd_context=answer_meta.get("jd_context", "")
+        )
+        critic["followup_questions"] = generate_followup_questions(
+            question,
+            answer,
+            phase1_question_type,
+            resume_context=answer_meta.get("resume_context", ""),
+            jd_context=answer_meta.get("jd_context", "")
+        )
+        store.update_agent_state("Critic", "done", "Review completed", critic)
+
+        updated = store.append_history(question, answer, selected_agent, phase1_question_type, critic, source)
+    context = context or {}
+    context_sources = [
+        source_name
+        for source_name, present in (
+            ("resume", context.get("has_resume")),
+            ("jd", context.get("has_jd")),
+            ("knowledge", context.get("has_knowledge")),
+        )
+        if present
+    ]
+    rag = rag or {}
+
+    return {
+        "question": question,
+        "question_type": phase1_question_type,
+        "selected_agent": selected_agent,
+        "answer": answer,
+        "critic": critic,
+        "blackboard_version": updated["version"],
+        "context_used": bool(context),
+        "context_sources": context_sources,
+        "context": context,
+        "rag_used": bool(rag.get("has_rag")),
+        "rag_sources": rag.get("sources", []),
+        "rag": rag,
+    }
+
+
+configure_phase1_pipeline(_run_phase1_answer_pipeline_sync)
+
+
+def _ask_phase1_impl(req: AskRequest) -> AskResponse:
+    return AskResponse(
+        **_run_phase1_answer_pipeline_sync(
+            question=req.question,
+            language=req.language,
+            source=req.source,
+        )
     )
-    critic["followup_questions"] = generate_followup_questions(
-        req.question,
-        answer,
-        question_type,
-        resume_context=answer_meta.get("resume_context", ""),
-        jd_context=answer_meta.get("jd_context", "")
-    )
-    store.update_agent_state("Critic", "done", "Review completed", critic)
-    
-    updated = store.append_history(req.question, answer, selected_agent, question_type, critic, req.source)
+
+
+def _ignored_ask_response(req: AskRequest) -> AskResponse:
+    try:
+        blackboard_version = int(store.read().get("version", 0))
+    except Exception:
+        blackboard_version = 0
 
     return AskResponse(
-        question=req.question, 
-        question_type=question_type, 
-        selected_agent=selected_agent, 
-        answer=answer, 
-        critic=critic,
-        blackboard_version=updated["version"]
+        question=req.question,
+        question_type="ignored",
+        selected_agent="Perception",
+        answer="",
+        critic={
+            "clarity_score": 1.0,
+            "correctness_score": 1.0,
+            "human_like_score": 1.0,
+            "resume_alignment_score": 1.0,
+            "privacy_score": 1.0,
+            "jd_alignment_score": 1.0,
+            "jd_alignment_notes": [],
+            "final_score": 100,
+            "main_weakness": "none",
+            "specific_issues": ["No complete interview question detected."],
+            "rewrite_strategy": "No answer generated.",
+            "should_rewrite": False,
+            "critic_notes": ["PerceptionAgent skipped this input."],
+            "improved_answer_suggestion": "No complete interview question detected.",
+            "human_like_rewrite": {},
+            "followup_questions": {},
+        },
+        blackboard_version=blackboard_version,
     )
+
+
+def _unhandled_ask_response(req: AskRequest, question_type: str = "unknown") -> AskResponse:
+    try:
+        blackboard_version = int(store.read().get("version", 0))
+    except Exception:
+        blackboard_version = 0
+
+    return AskResponse(
+        question=req.question,
+        question_type=question_type or "unknown",
+        selected_agent="Perception",
+        answer="",
+        critic={
+            "clarity_score": 0.8,
+            "correctness_score": 0.8,
+            "human_like_score": 1.0,
+            "resume_alignment_score": 0.5,
+            "privacy_score": 1.0,
+            "jd_alignment_score": 0.5,
+            "jd_alignment_notes": [],
+            "final_score": 80,
+            "main_weakness": "no_specialized_agent",
+            "specific_issues": ["Question detected but no specialized agent handled it."],
+            "rewrite_strategy": "Route this question type to a specialized agent before answering.",
+            "should_rewrite": False,
+            "critic_notes": ["Phase2 detected a question but no Tech/Behavioral agent accepted it."],
+            "improved_answer_suggestion": "Question detected but no specialized agent handled it.",
+            "human_like_rewrite": {},
+            "followup_questions": {},
+        },
+        blackboard_version=blackboard_version,
+    )
+
+
+def _ask_phase2_impl(req: AskRequest) -> AskResponse:
+    session_id = f"api.ask.{uuid4()}"
+    event = BBEvent(
+        session_id=session_id,
+        source_agent="api.ask",
+        type=EventType.MANUAL_INPUT,
+        payload={
+            "question": req.question,
+            "language": req.language,
+            "source": req.source,
+        },
+    )
+    outputs = _run_async_blocking(phase2_orchestrator.dispatch(event))
+    final_event = next(
+        (event for event in reversed(outputs) if event.type == EventType.ANSWER_FINAL),
+        None,
+    )
+    if final_event is None:
+        question_detected = any(event.type == EventType.QUESTION_DETECTED for event in outputs)
+        if not question_detected:
+            response = _ignored_ask_response(req)
+            response.session_id = session_id
+            return response
+
+        error_event = next(
+            (event for event in reversed(outputs) if event.type == EventType.ERROR),
+            None,
+        )
+        if error_event is not None:
+            error = error_event.payload.get("error")
+            raise RuntimeError(f"Phase2 answer agent failed before ANSWER_FINAL: {error}")
+
+        detected_event = next(
+            (event for event in reversed(outputs) if event.type == EventType.QUESTION_DETECTED),
+            None,
+        )
+        detected_type = ""
+        if detected_event is not None:
+            detected_type = str(detected_event.payload.get("question_type", "unknown"))
+        response = _unhandled_ask_response(req, detected_type)
+        response.session_id = session_id
+        return response
+
+    raw_result = final_event.payload.get("raw_result")
+    if not isinstance(raw_result, dict):
+        raise RuntimeError("Phase2 MainAgent returned invalid raw_result")
+    raw_result.setdefault("session_id", session_id)
+    return AskResponse(**raw_result)
+
+
+@app.post("/ask", response_model=AskResponse)
+def ask(req: AskRequest):
+    try:
+        return _ask_phase2_impl(req)
+    except Exception as exc:
+        print("[W9] Phase2 path failed, fallback to Phase1:", exc)
+        return _ask_phase1_impl(req)
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+TECH_TYPES = {"technical", "algorithm", "system_design"}
+
+
+def _stream_answer(req: AskRequest):
+    """SSE generator for /ask_stream (M1).
+
+    Emits: meta -> delta* -> final (with critic) -> done. Falls back to a stub
+    answer when the LLM is disabled/unavailable so the stream always completes.
+
+    Publishes its stages to the in-memory event bus so /trace/{session_id}
+    returns a real agent trace for streamed requests too (cheap; does not touch
+    the JSON blackboard store, so latency stays low).
+    """
+    session_id = f"api.stream.{uuid4()}"
+
+    def publish(event_type: EventType, payload: dict, parent: BBEvent | None) -> BBEvent:
+        event = BBEvent(
+            session_id=session_id,
+            source_agent="api.ask_stream",
+            type=event_type,
+            payload=payload,
+            parent_event_id=parent.event_id if parent else None,
+        )
+        phase2_bus.publish(event)
+        return event
+
+    root = publish(
+        EventType.MANUAL_INPUT,
+        {"question": req.question, "language": req.language, "source": req.source},
+        None,
+    )
+
+    perception = classify_interview_input(req.question)
+    if not perception["should_answer"]:
+        yield _sse({
+            "type": "ignored",
+            "session_id": session_id,
+            "question_type": perception["question_type"],
+            "reason": perception["reason"],
+        })
+        yield _sse({"type": "done", "session_id": session_id})
+        return
+
+    phase2_type = perception["question_type"]
+    phase1_type = _phase2_question_type_to_phase1(phase2_type) or classify_question(req.question)
+    selected_agent = "Tech/Code" if phase2_type in TECH_TYPES else "Behavioral"
+    detected = publish(
+        EventType.QUESTION_DETECTED,
+        {"question": req.question, "question_type": phase2_type, "selected_agent": selected_agent},
+        root,
+    )
+    yield _sse({
+        "type": "meta",
+        "session_id": session_id,
+        "question": req.question,
+        "question_type": phase1_type,
+        "phase2_type": phase2_type,
+        "selected_agent": selected_agent,
+    })
+
+    resume_context, _ = load_resume_context()
+    jd_context, _ = load_jd_context()
+    knowledge_context, _ = load_knowledge_context()
+    recent_context = build_recent_context(limit=3)
+    rag_meta = retrieve_knowledge_snippets(req.question, knowledge_context, limit=5)
+    prompt = build_interview_prompt(
+        req.question,
+        phase1_type,
+        selected_agent,
+        resume_context=resume_context,
+        jd_context=jd_context,
+        recent_context=recent_context,
+        knowledge_context=knowledge_context,
+        rag_snippets=rag_meta.get("snippets", []),
+    )
+
+    pieces: list[str] = []
+    llm_meta: dict = {}
+    cfg = get_llm_config()
+    if not cfg.use_ollama:
+        stub = generate_stub_answer(req.question, phase1_type, selected_agent)
+        pieces.append(stub)
+        llm_meta = {"provider": "stub", "model": "none", "fallback_used": True}
+        yield _sse({"type": "delta", "text": stub})
+    else:
+        try:
+            for piece in get_llm_router().stream(prompt, llm_meta):
+                pieces.append(piece)
+                yield _sse({"type": "delta", "text": piece})
+        except Exception as error:
+            stub = generate_stub_answer(req.question, phase1_type, selected_agent)
+            pieces = [stub]
+            llm_meta = {"provider": "stub", "model": "none", "fallback_used": True, "error": str(error)}
+            yield _sse({"type": "delta", "text": stub, "fallback": True})
+
+    answer = "".join(pieces)
+
+    # Build the same context/rag the CriticAgent uses, then review once.
+    candidate = build_candidate_context(req.question)
+    context_payload = {
+        "resume_summary": candidate["resume_summary"],
+        "jd_summary": candidate["jd_summary"],
+        "knowledge_summary": candidate["knowledge_summary"],
+        "matched_snippets": candidate["matched_snippets"],
+        "constraints": candidate["constraints"],
+        "has_resume": bool(candidate["resume_raw"].strip()),
+        "has_jd": bool(candidate["jd_raw"].strip()),
+        "has_knowledge": bool(candidate["knowledge_raw"].strip()),
+    }
+    rag_chunks = retrieve_local_knowledge(req.question, load_knowledge_text(), top_k=3)
+    rag_payload = {"chunks": rag_chunks, "has_rag": bool(rag_chunks)}
+    context_used = bool(
+        context_payload.get("has_resume")
+        or context_payload.get("has_jd")
+        or context_payload.get("has_knowledge")
+    )
+    publish(
+        EventType.CONTEXT_LOADED,
+        {"question": req.question, "question_type": phase2_type, "has_resume": context_payload["has_resume"],
+         "has_jd": context_payload["has_jd"], "has_knowledge": context_payload["has_knowledge"]},
+        detected,
+    )
+    publish(
+        EventType.RAG_CHUNK,
+        {"question": req.question, "question_type": phase2_type, "has_rag": rag_payload["has_rag"],
+         "sources": ["knowledge.txt"] if rag_payload["has_rag"] else []},
+        detected,
+    )
+
+    critic = review_answer(
+        question=req.question,
+        answer=answer,
+        question_type=phase2_type,
+        selected_agent=selected_agent,
+        context=context_payload,
+        rag=rag_payload,
+    )
+    final_answer = str(critic.get("final_answer") or answer)
+
+    draft = publish(
+        EventType.ANSWER_DRAFT,
+        {"question": req.question, "question_type": phase2_type, "selected_agent": selected_agent},
+        detected,
+    )
+    publish(
+        EventType.ANSWER_FINAL,
+        {"question": req.question, "question_type": phase2_type, "selected_agent": selected_agent,
+         "approved": bool(critic.get("approved"))},
+        draft,
+    )
+
+    yield _sse({
+        "type": "final",
+        "session_id": session_id,
+        "question": req.question,
+        "question_type": phase1_type,
+        "selected_agent": selected_agent,
+        "answer": final_answer,
+        "critic": critic,
+        "context_used": context_used,
+        "rag_used": bool(rag_payload.get("has_rag")),
+        "llm": {
+            "provider": llm_meta.get("provider"),
+            "model": llm_meta.get("model"),
+            "fallback": bool(llm_meta.get("fallback_used")),
+            "redactions": llm_meta.get("redactions", {}),
+        },
+    })
+    yield _sse({"type": "done", "session_id": session_id})
+
+
+@app.post("/ask_stream")
+def ask_stream(req: AskRequest):
+    return StreamingResponse(
+        _stream_answer(req),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Practice / Coaching loop (M2): 陪练 -> 作答 -> 评分+自适应追问 -> 复盘报告
+# ---------------------------------------------------------------------------
+@app.post("/practice/start")
+def practice_start(req: StartRequest):
+    state = _coaching_service.start(
+        req.session_id,
+        role=req.role,
+        focus=req.focus,
+        num_questions=req.num_questions,
+        language=req.language,
+    )
+    return state.model_dump()
+
+
+@app.post("/practice/answer")
+def practice_answer(req: AnswerRequest):
+    try:
+        return _coaching_service.submit_answer(req.session_id, req.answer)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/practice/state")
+def practice_state(session_id: str = "default"):
+    return _coaching_service.state(session_id).model_dump()
+
+
+@app.get("/practice/report")
+def practice_report(session_id: str = "default"):
+    return _coaching_service.report(session_id)
 
 
 @app.post("/ask_image", response_model=AskResponse)

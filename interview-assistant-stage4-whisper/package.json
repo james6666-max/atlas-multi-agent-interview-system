@@ -4,10 +4,10 @@
   "main": "./dist-electron/main.js",
   "scripts": {
     "clean": "npx rimraf dist dist-electron",
-    "dev": "cross-env NODE_ENV=development npm run clean && concurrently \"tsc -w -p tsconfig.electron.json\" \"vite\" \"wait-on -t 30000 http://localhost:54321 && electron ./dist-electron/main.js\"",
+    "dev": "cross-env NODE_ENV=development npm run clean && concurrently \"tsc -w -p tsconfig.electron.json --noEmit\" \"vite\"",
     "test": "echo \"No tests defined. Please contribute if you like\" && exit 0",
     "lint": "npx eslint .",
-    "start": "cross-env NODE_ENV=development concurrently \"tsc -p tsconfig.electron.json\" \"vite\" \"wait-on -t 30000 http://localhost:54321 && electron ./dist-electron/main.js\"",
+    "start": "cross-env NODE_ENV=development concurrently \"tsc -p tsconfig.electron.json --noEmit\" \"vite\"",
     "build": "cross-env NODE_ENV=production npm run clean && vite build && tsc -p tsconfig.electron.json",
     "run-prod": "cross-env NODE_ENV=production electron ./dist-electron/main.js",
     "typecheck": "tsc --noEmit",
@@ -24,6 +24,15 @@
       "dist-electron/**/*",
       "package.json",
       "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../blackboard_day5_7/dist/atlas-backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "directories": {
       "output": "release",
@@ -137,24 +146,26 @@
     "caniuse-lite": "^1.0.30001775",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "diff": "^7.0.0",
+    "diff": "^9.0.0",
     "dotenv": "^16.4.7",
     "electron-log": "^5.2.4",
     "electron-updater": "^6.3.9",
     "lucide-react": "^0.460.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^9.1.0",
     "react-router-dom": "^6.28.1",
     "react-syntax-highlighter": "^15.6.1",
+    "remark-gfm": "^4.0.1",
     "screenshot-desktop": "^1.15.0",
     "tailwind-merge": "^2.5.5",
     "uuid": "^11.0.3"
   },
   "devDependencies": {
     "@electron/typescript-definitions": "^8.14.0",
-    "@eslint/css": "^0.6.0",
+    "@eslint/css": "^1.2.0",
     "@eslint/js": "^9.24.0",
-    "@eslint/json": "^0.11.0",
+    "@eslint/json": "^1.2.0",
     "@eslint/markdown": "^6.3.0",
     "@types/diff": "^6.0.0",
     "@types/node": "^20.11.30",
@@ -170,8 +181,8 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
-    "electron": "^29.1.4",
-    "electron-builder": "^24.13.3",
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
     "electron-is-dev": "^3.0.1",
     "eslint": "^8.57.1",
     "eslint-flat-config-utils": "^2.0.1",

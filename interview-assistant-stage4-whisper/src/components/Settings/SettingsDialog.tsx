@@ -12,6 +12,8 @@ import { Button } from "../ui/button";
 import { Loader2, RefreshCw, Search } from "lucide-react";
 import { useToast } from "../../contexts/toast";
 import { CandidateProfileSection, CandidateProfile } from "./CandidateProfileSection";
+import { AtlasLlmSettings } from "../Phase2/AtlasLlmSettings";
+import { useI18n } from "../../i18n/LanguageProvider";
 import {
   APIProvider,
   AIModel,
@@ -60,6 +62,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
   const [modelFetchSource, setModelFetchSource] = useState<string | null>(null);
   const [modelSearchQuery, setModelSearchQuery] = useState("");
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   // Sync with external open state
   useEffect(() => {
@@ -263,8 +266,9 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
     }
   };
 
-  // Format pricing for display
-  const formatPrice = (price: number): string => {
+  // Format pricing for display (tolerates missing/undefined prices)
+  const formatPrice = (price?: number | null): string => {
+    if (typeof price !== "number" || !Number.isFinite(price)) return "?";
     if (price === 0) return "Free";
     if (price < 0.01) return `<$0.01`;
     if (price < 1) return `$${price.toFixed(2)}`;
@@ -274,7 +278,9 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
   // Build pricing description string
   const pricingDesc = (pricing?: ModelPricing, contextLength?: number): string => {
     const parts: string[] = [];
-    if (pricing) {
+    const hasInput = typeof pricing?.input === "number" && Number.isFinite(pricing.input);
+    const hasOutput = typeof pricing?.output === "number" && Number.isFinite(pricing.output);
+    if (pricing && (hasInput || hasOutput)) {
       if (pricing.input === 0 && pricing.output === 0) {
         parts.push("Free");
       } else {
@@ -340,19 +346,23 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
         }}
       >
         <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle>{t("set.title")}</DialogTitle>
           <DialogDescription className="text-white/70">
-            Configure your API key, AI models, and optional candidate profile.
+            {t("set.desc")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
-          {/* API Settings Section */}
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold text-white">API Settings</h2>
-            <p className="text-xs text-white/60">
-              Choose your provider and models. These control how screenshots and solutions are processed.
-            </p>
-          </div>
+          {/* Atlas backend answer engine (drives /ask and streaming) */}
+          <AtlasLlmSettings />
+
+          <div className="border-t border-white/10 pt-4" />
+
+          {/* Legacy interview-coder solver settings: collapsed by default. */}
+          <details className="legacy-settings-details">
+            <summary className="text-sm font-semibold text-white cursor-pointer select-none">
+              {t("set.legacySolver")}
+            </summary>
+            <p className="text-xs text-white/60 mt-1 mb-2">{t("set.legacySolverDesc")}</p>
 
           {/* API Provider Selection - Dynamic grid from PROVIDER_CONFIGS */}
           <div className="space-y-2">
@@ -464,6 +474,10 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
                 <div className="text-white/90 font-mono">Ctrl+B / Cmd+B</div>
                 <div className="text-white/70">Take Screenshot</div>
                 <div className="text-white/90 font-mono">Ctrl+H / Cmd+H</div>
+                <div className="text-white/70">Atlas: Screenshot → Answer</div>
+                <div className="text-white/90 font-mono">Ctrl+Shift+A</div>
+                <div className="text-white/70">Atlas: Ask Clipboard Text</div>
+                <div className="text-white/90 font-mono">Ctrl+Shift+V</div>
                 <div className="text-white/70">Start/Stop Recording</div>
                 <div className="text-white/90 font-mono">Ctrl+M / Cmd+M</div>
                 <div className="text-white/70">Toggle Speaker Mode</div>
@@ -701,6 +715,7 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
               />
             </div>
           </div>
+          </details>
         </div>
         <DialogFooter className="flex justify-between sm:justify-between">
           <Button
@@ -708,14 +723,14 @@ export function SettingsDialog({ open: externalOpen, onOpenChange }: SettingsDia
             onClick={() => handleOpenChange(false)}
             className="border-white/10 hover:bg-white/5 text-white"
           >
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             className="px-4 py-3 bg-white text-black rounded-xl font-medium hover:bg-white/90 transition-colors"
             onClick={handleSave}
             disabled={isLoading || !apiKey}
           >
-            {isLoading ? "Saving..." : "Save Settings"}
+            {isLoading ? t("set.saving") : t("set.save")}
           </Button>
         </DialogFooter>
       </DialogContent>

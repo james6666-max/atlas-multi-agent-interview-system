@@ -7,3 +7,4 @@ rapidocr-onnxruntime
 pillow
 faster-whisper
 python-multipart
+pypdf

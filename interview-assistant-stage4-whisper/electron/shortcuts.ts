@@ -1,4 +1,4 @@
-import { globalShortcut, app } from "electron"
+import { globalShortcut, app, clipboard } from "electron"
 import { IShortcutsHelperDeps } from "./main"
 import { configHelper } from "./ConfigHelper"
 
@@ -138,6 +138,42 @@ export class ShortcutsHelper {
         }
       }
     });
+
+    // ---- Atlas live-assist hotkeys (M3) ----
+    // Ctrl/Cmd+Shift+A: capture screen -> Atlas OCR -> answer (hands-free, e.g. a
+    // LeetCode / system-design question on screen during a real interview).
+    globalShortcut.register("CommandOrControl+Shift+A", async () => {
+      const mainWindow = this.deps.getMainWindow()
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      if (!this.deps.isVisible()) this.deps.toggleMainWindow()
+      try {
+        await mainWindow.webContents.executeJavaScript(
+          "window.dispatchEvent(new CustomEvent('atlas-live-screenshot'));"
+        )
+      } catch (error) {
+        console.error("Atlas screenshot hotkey failed:", error)
+      }
+    })
+
+    // Ctrl/Cmd+Shift+V: ask Atlas about the current clipboard text (streamed).
+    globalShortcut.register("CommandOrControl+Shift+V", async () => {
+      const mainWindow = this.deps.getMainWindow()
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      const text = clipboard.readText() || ""
+      if (!text.trim()) {
+        console.log("Atlas clipboard hotkey: clipboard empty, ignoring.")
+        return
+      }
+      if (!this.deps.isVisible()) this.deps.toggleMainWindow()
+      const payload = JSON.stringify(text)
+      try {
+        await mainWindow.webContents.executeJavaScript(
+          `window.dispatchEvent(new CustomEvent('atlas-live-ask', { detail: { text: ${payload} } }));`
+        )
+      } catch (error) {
+        console.error("Atlas clipboard hotkey failed:", error)
+      }
+    })
 
     globalShortcut.register("CommandOrControl+Q", () => {
       console.log("Command/Ctrl + Q pressed. Quitting application.")

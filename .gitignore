@@ -15,3 +15,9 @@ env/
 atlas_*.png
 atlas_*.wav
 .env
+
+# Runtime LLM settings (may contain a cloud API key) — never commit
+atlas_settings.json
+*.pytest.bak
+*.eval.bak
+*.smoke.bak

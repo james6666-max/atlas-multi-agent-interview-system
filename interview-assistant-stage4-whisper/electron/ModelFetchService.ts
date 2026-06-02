@@ -242,10 +242,10 @@ export class ModelFetchService {
         return {
           ...model,
           pricing: model.pricing || {
-            input: catalogEntry.cost.input,
-            output: catalogEntry.cost.output,
-            cacheRead: catalogEntry.cost.cache_read,
-            cacheWrite: catalogEntry.cost.cache_write,
+            input: catalogEntry.cost?.input,
+            output: catalogEntry.cost?.output,
+            cacheRead: catalogEntry.cost?.cache_read,
+            cacheWrite: catalogEntry.cost?.cache_write,
           },
           contextLength: model.contextLength || catalogEntry.limit?.context,
           capabilities: {
@@ -274,10 +274,10 @@ export class ModelFetchService {
       name: m.name || m.id,
       provider,
       pricing: {
-        input: m.cost.input,
-        output: m.cost.output,
-        cacheRead: m.cost.cache_read,
-        cacheWrite: m.cost.cache_write,
+        input: m.cost?.input,
+        output: m.cost?.output,
+        cacheRead: m.cost?.cache_read,
+        cacheWrite: m.cost?.cache_write,
       },
       contextLength: m.limit?.context,
       capabilities: {

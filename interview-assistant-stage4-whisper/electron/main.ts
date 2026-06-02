@@ -7,6 +7,7 @@ import { ScreenshotHelper } from "./ScreenshotHelper"
 import { ShortcutsHelper } from "./shortcuts"
 import { initAutoUpdater } from "./autoUpdater"
 import { configHelper } from "./ConfigHelper"
+import { startBackend, stopBackend } from "./backend-launcher"
 import * as dotenv from "dotenv"
 
 // Constants
@@ -545,7 +546,12 @@ async function initializeApp() {
     app.setPath('cache', cachePath)
       
     loadEnvVariables()
-    
+
+    // Start the bundled backend sidecar (packaged builds only; no-op in dev).
+    // Kicked off non-awaited so the window can load while it boots; the renderer
+    // polls /config/status and shows backend status.
+    void startBackend()
+
     // Ensure a configuration file exists
     if (!configHelper.hasApiKey()) {
       console.log("No API key found in configuration. User will need to set up.")
@@ -625,11 +631,16 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
+      stopBackend()
       app.quit()
       state.mainWindow = null
     }
   })
 }
+
+app.on("will-quit", () => {
+  stopBackend()
+})
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {

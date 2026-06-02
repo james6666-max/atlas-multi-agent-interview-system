@@ -1,0 +1,502 @@
+[
+  {
+    "id": "tech_001",
+    "question": "What is RESTful API?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["RESTful", "API"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Basic REST concept"
+  },
+  {
+    "id": "tech_002",
+    "question": "Explain Python GIL.",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Python", "GIL"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Python runtime concept"
+  },
+  {
+    "id": "tech_003",
+    "question": "What is HTTP cache?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["HTTP", "cache"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Network/cache concept"
+  },
+  {
+    "id": "tech_004",
+    "question": "How does TCP differ from UDP?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["TCP", "UDP"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Networking comparison"
+  },
+  {
+    "id": "tech_005",
+    "question": "What is React useEffect used for?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["React", "useEffect"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Frontend hook"
+  },
+  {
+    "id": "tech_006",
+    "question": "What problem does Docker solve?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Docker"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Container concept"
+  },
+  {
+    "id": "tech_007",
+    "question": "How does FastAPI handle request validation?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["FastAPI"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Backend framework"
+  },
+  {
+    "id": "tech_008",
+    "question": "What is Linux process scheduling?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Linux", "process"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "OS concept"
+  },
+  {
+    "id": "tech_009",
+    "question": "Why do API gateways help backend systems?",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["API"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Architecture concept"
+  },
+  {
+    "id": "tech_010",
+    "question": "Explain Vue component lifecycle.",
+    "expected_question_type": "technical",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Vue"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Frontend framework"
+  },
+  {
+    "id": "algo_001",
+    "question": "How does DFS traversal work?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["DFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Graph traversal"
+  },
+  {
+    "id": "algo_002",
+    "question": "How does BFS find the shortest path in an unweighted graph?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["BFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Shortest path"
+  },
+  {
+    "id": "algo_003",
+    "question": "Compare DFS and BFS.",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["DFS", "BFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Traversal comparison"
+  },
+  {
+    "id": "algo_004",
+    "question": "When would you use BFS instead of DFS?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["BFS", "DFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Algorithm choice"
+  },
+  {
+    "id": "algo_005",
+    "question": "How would you implement DFS with recursion?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["DFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Recursive implementation"
+  },
+  {
+    "id": "algo_006",
+    "question": "How would you implement BFS with a queue?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["BFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Queue implementation"
+  },
+  {
+    "id": "algo_007",
+    "question": "What are common DFS edge cases?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["DFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Edge cases"
+  },
+  {
+    "id": "algo_008",
+    "question": "What are common BFS edge cases?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["BFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Edge cases"
+  },
+  {
+    "id": "algo_009",
+    "question": "How do DFS and BFS handle visited nodes?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["DFS", "BFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Visited set"
+  },
+  {
+    "id": "algo_010",
+    "question": "What is the space tradeoff between DFS and BFS?",
+    "expected_question_type": "algorithm",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["DFS", "BFS"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Complexity tradeoff"
+  },
+  {
+    "id": "sys_001",
+    "question": "Design a URL shortener system.",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["短链接", "Base62", "系统"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Classic system design"
+  },
+  {
+    "id": "sys_002",
+    "question": "Design a scalable chat system.",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Design", "scalable"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Scalable messaging"
+  },
+  {
+    "id": "sys_003",
+    "question": "How would you design a rate limiter?",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["限流", "令牌桶", "滑动窗口"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Rate limiting"
+  },
+  {
+    "id": "sys_004",
+    "question": "What are key tradeoffs in system design?",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["system design"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Design tradeoffs"
+  },
+  {
+    "id": "sys_005",
+    "question": "Design a scalable notification service.",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Design", "scalable"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Notification service"
+  },
+  {
+    "id": "sys_006",
+    "question": "How would you design a scalable API service?",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["API", "设计"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "High traffic backend"
+  },
+  {
+    "id": "sys_007",
+    "question": "Design a scalable file upload system.",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["Design", "scalable"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "File upload"
+  },
+  {
+    "id": "sys_008",
+    "question": "What bottlenecks would you consider in system design?",
+    "expected_question_type": "system_design",
+    "expected_selected_agent": "Tech/Code",
+    "should_answer": true,
+    "must_include_any": ["system design"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Bottleneck reasoning"
+  },
+  {
+    "id": "beh_001",
+    "question": "Tell me about a time you solved a difficult technical problem.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["difficult", "problem"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "STAR problem solving"
+  },
+  {
+    "id": "beh_002",
+    "question": "Describe a time you worked with a team conflict.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["team", "conflict"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Team conflict"
+  },
+  {
+    "id": "beh_003",
+    "question": "Tell me about your greatest strength.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["strength"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Strength question"
+  },
+  {
+    "id": "beh_004",
+    "question": "Tell me about your weakness.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["weakness"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Weakness question"
+  },
+  {
+    "id": "beh_005",
+    "question": "Describe a time you handled pressure.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["pressure"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Pressure handling"
+  },
+  {
+    "id": "beh_006",
+    "question": "Tell me about a successful project.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["successful", "project"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Success story"
+  },
+  {
+    "id": "beh_007",
+    "question": "Describe a time you failed and learned a lesson.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["failed", "lesson"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Failure reflection"
+  },
+  {
+    "id": "beh_008",
+    "question": "Tell me about a time you collaborated across teams.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["collaborated", "teams"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Collaboration"
+  },
+  {
+    "id": "beh_009",
+    "question": "Use STAR to explain a challenging project.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["STAR", "challenging"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "STAR prompt"
+  },
+  {
+    "id": "beh_010",
+    "question": "Tell me about a time you improved communication.",
+    "expected_question_type": "behavioral",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["communication"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Communication"
+  },
+  {
+    "id": "resume_001",
+    "question": "In your resume, what project are you most proud of?",
+    "expected_question_type": "resume_followup",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["resume", "project"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Resume project follow-up"
+  },
+  {
+    "id": "resume_002",
+    "question": "What was your contribution in the project on your resume?",
+    "expected_question_type": "resume_followup",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["contribution", "project"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Contribution follow-up"
+  },
+  {
+    "id": "resume_003",
+    "question": "What resume work experience is most relevant?",
+    "expected_question_type": "resume_followup",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["resume", "work"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Internship follow-up"
+  },
+  {
+    "id": "resume_004",
+    "question": "How did the project in your resume use FastAPI?",
+    "expected_question_type": "resume_followup",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["project", "FastAPI"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Resume technical follow-up"
+  },
+  {
+    "id": "resume_005",
+    "question": "What did you learn from the resume project?",
+    "expected_question_type": "resume_followup",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["resume", "project"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Learning follow-up"
+  },
+  {
+    "id": "resume_006",
+    "question": "What is the most important project detail in your resume?",
+    "expected_question_type": "resume_followup",
+    "expected_selected_agent": "Behavioral",
+    "should_answer": true,
+    "must_include_any": ["project", "resume"],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Resume detail"
+  },
+  {
+    "id": "ignored_001",
+    "question": "hello, nice weather.",
+    "expected_question_type": "ignored",
+    "expected_selected_agent": "Perception",
+    "should_answer": false,
+    "must_include_any": [],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Chitchat"
+  },
+  {
+    "id": "ignored_002",
+    "question": "hi",
+    "expected_question_type": "ignored",
+    "expected_selected_agent": "Perception",
+    "should_answer": false,
+    "must_include_any": [],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Short greeting"
+  },
+  {
+    "id": "ignored_003",
+    "question": "okay",
+    "expected_question_type": "ignored",
+    "expected_selected_agent": "Perception",
+    "should_answer": false,
+    "must_include_any": [],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Acknowledgement"
+  },
+  {
+    "id": "ignored_004",
+    "question": "if you",
+    "expected_question_type": "ignored",
+    "expected_selected_agent": "Perception",
+    "should_answer": false,
+    "must_include_any": [],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Incomplete English phrase"
+  },
+  {
+    "id": "ignored_005",
+    "question": "wait a moment",
+    "expected_question_type": "ignored",
+    "expected_selected_agent": "Perception",
+    "should_answer": false,
+    "must_include_any": [],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Chitchat/incomplete"
+  },
+  {
+    "id": "ignored_006",
+    "question": "OK",
+    "expected_question_type": "ignored",
+    "expected_selected_agent": "Perception",
+    "should_answer": false,
+    "must_include_any": [],
+    "must_not_include_any": ["As an AI", "作为一个AI"],
+    "notes": "Short acknowledgement"
+  }
+]

@@ -25,7 +25,7 @@ if errorlevel 1 goto :done
 call :is_port_listening %BACKEND_PORT%
 if errorlevel 1 (
     echo Starting backend on port %BACKEND_PORT%...
-    start "Atlas Backend" cmd /k "cd /d ""%BACKEND_DIR%"" && conda run -n %BACKEND_CONDA_ENV% python -m uvicorn orchestrator_v0:app --reload --host 127.0.0.1 --port %BACKEND_PORT%"
+    start "Atlas Backend" cmd /k "cd /d ""%BACKEND_DIR%"" && conda run -n %BACKEND_CONDA_ENV% python -m uvicorn orchestrator_v0:app --host 127.0.0.1 --port %BACKEND_PORT%"
 ) else (
     echo Backend already running on port %BACKEND_PORT%.
 )
