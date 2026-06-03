@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react"
+import { useI18n } from "../i18n/LanguageProvider"
 
 export function useReportActions({
   refreshBlackboard,
@@ -7,6 +8,7 @@ export function useReportActions({
   refreshBlackboard: () => void
   setPageNotice: (notice: string) => void
 }) {
+  const { lang } = useI18n()
   const [mockState, setMockState] = useState<any>(null)
   const [mockAnswer, setMockAnswer] = useState("")
   const [report, setReport] = useState<any>(null)
@@ -52,7 +54,7 @@ export function useReportActions({
   const generateReport = useCallback(async () => {
     try {
       setReportLoading(true)
-      const res = await fetch("http://127.0.0.1:8000/report/session")
+      const res = await fetch(`http://127.0.0.1:8000/report/session?lang=${encodeURIComponent(lang)}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setReport(await res.json())
     } catch (error: any) {
@@ -60,12 +62,12 @@ export function useReportActions({
     } finally {
       setReportLoading(false)
     }
-  }, [setPageNotice])
+  }, [lang, setPageNotice])
 
   const exportReport = useCallback(async () => {
     try {
       setExportLoading(true)
-      const res = await fetch("http://127.0.0.1:8000/report/export_markdown")
+      const res = await fetch(`http://127.0.0.1:8000/report/export_markdown?lang=${encodeURIComponent(lang)}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setExportedMarkdown(await res.text())
     } catch (error: any) {
@@ -73,7 +75,7 @@ export function useReportActions({
     } finally {
       setExportLoading(false)
     }
-  }, [setPageNotice])
+  }, [lang, setPageNotice])
 
   const clearHistory = useCallback(async () => {
     if (!window.confirm("Clear Blackboard history?")) return

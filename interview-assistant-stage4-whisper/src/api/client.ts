@@ -154,8 +154,8 @@ export async function practiceAnswer(answer: string, sessionId = "default"): Pro
   return parseJsonResponse<PracticeAnswerResult>(response)
 }
 
-export async function practiceReport(sessionId = "default"): Promise<PracticeReport> {
-  const response = await fetch(`${API_BASE_URL}/practice/report?session_id=${encodeURIComponent(sessionId)}`)
+export async function practiceReport(sessionId = "default", lang = "zh"): Promise<PracticeReport> {
+  const response = await fetch(`${API_BASE_URL}/practice/report?session_id=${encodeURIComponent(sessionId)}&lang=${encodeURIComponent(lang)}`)
   return parseJsonResponse<PracticeReport>(response)
 }
 

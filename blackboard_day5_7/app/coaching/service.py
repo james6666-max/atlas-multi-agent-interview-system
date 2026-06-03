@@ -212,20 +212,22 @@ class CoachingService:
             config=session.config,
         )
 
-    def report(self, session_id: str) -> Dict[str, Any]:
+    def report(self, session_id: str, language: str = "zh") -> Dict[str, Any]:
+        language = language if language in {"zh", "en"} else "zh"
         session = self._sessions.get(session_id)
         if session is None or not session.turns:
             return {
                 "session_id": session_id,
                 "overall_score": 0,
-                "summary": "尚无练习记录,请先开始一场模拟面试。",
+                "summary": "尚无练习记录，请先开始一场模拟面试。" if language == "zh" else "No practice record yet. Start a mock interview first.",
                 "strengths": [],
                 "weaknesses": [],
                 "by_type": {},
                 "recommended_practice": [],
                 "question_reviews": [],
             }
-        return build_practice_report(session_id, session.turns, session.config)
+        config = {**session.config, "language": language}
+        return build_practice_report(session_id, session.turns, config)
 
 
 def build_practice_report(session_id: str, turns: List[PracticeTurn], config: Dict[str, Any]) -> Dict[str, Any]:

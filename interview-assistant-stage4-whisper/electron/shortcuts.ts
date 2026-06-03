@@ -34,6 +34,16 @@ export class ShortcutsHelper {
     }
   }
 
+  private adjustWindowSize(delta: number): void {
+    const mainWindow = this.deps.getMainWindow()
+    if (!mainWindow || mainWindow.isDestroyed()) return
+
+    const bounds = mainWindow.getBounds()
+    const nextWidth = Math.max(420, Math.min(1400, bounds.width + delta))
+    const nextHeight = Math.max(320, Math.min(1000, bounds.height + Math.round(delta * 0.75)))
+    mainWindow.setSize(nextWidth, nextHeight, true)
+  }
+
   public registerGlobalShortcuts(): void {
     globalShortcut.register("CommandOrControl+H", async () => {
       const mainWindow = this.deps.getMainWindow()
@@ -155,6 +165,20 @@ export class ShortcutsHelper {
       }
     })
 
+    // Ctrl/Cmd+Shift+S: select a screen region, then run the same Atlas OCR flow.
+    globalShortcut.register("CommandOrControl+Shift+S", async () => {
+      const mainWindow = this.deps.getMainWindow()
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      if (!this.deps.isVisible()) this.deps.toggleMainWindow()
+      try {
+        await mainWindow.webContents.executeJavaScript(
+          "window.dispatchEvent(new CustomEvent('atlas-live-region-screenshot'));"
+        )
+      } catch (error) {
+        console.error("Atlas region screenshot hotkey failed:", error)
+      }
+    })
+
     // Ctrl/Cmd+Shift+V: ask Atlas about the current clipboard text (streamed).
     globalShortcut.register("CommandOrControl+Shift+V", async () => {
       const mainWindow = this.deps.getMainWindow()
@@ -189,6 +213,16 @@ export class ShortcutsHelper {
     globalShortcut.register("CommandOrControl+]", () => {
       console.log("Command/Ctrl + ] pressed. Increasing opacity.")
       this.adjustOpacity(0.1)
+    })
+
+    globalShortcut.register("CommandOrControl+Shift+-", () => {
+      console.log("Command/Ctrl + Shift + - pressed. Shrinking window.")
+      this.adjustWindowSize(-100)
+    })
+
+    globalShortcut.register("CommandOrControl+Shift+=", () => {
+      console.log("Command/Ctrl + Shift + = pressed. Growing window.")
+      this.adjustWindowSize(100)
     })
     
     // Zoom controls

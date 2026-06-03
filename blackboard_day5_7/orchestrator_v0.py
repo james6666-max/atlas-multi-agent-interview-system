@@ -2092,8 +2092,8 @@ def practice_state(session_id: str = "default"):
 
 
 @app.get("/practice/report")
-def practice_report(session_id: str = "default"):
-    return _coaching_service.report(session_id)
+def practice_report(session_id: str = "default", lang: str = "zh"):
+    return _coaching_service.report(session_id, lang)
 
 
 @app.post("/ask_image", response_model=AskResponse)
@@ -2215,7 +2215,23 @@ async def ask_audio(
                 pass
 
 
-def build_session_report() -> dict:
+def _report_lang(lang: str = "zh") -> str:
+    value = (lang or "").strip().lower()
+    if value in {"en", "english"}:
+        return "en"
+    return "zh"
+
+
+def _report_unknown(lang: str) -> str:
+    return "未知" if _report_lang(lang) == "zh" else "unknown"
+
+
+def _report_text(lang: str, zh: str, en: str) -> str:
+    return zh if _report_lang(lang) == "zh" else en
+
+
+def build_session_report(lang: str = "zh") -> dict:
+    lang = _report_lang(lang)
     data = store.read()
     history = data.get("history", [])
     scored_items = []
@@ -2251,49 +2267,91 @@ def build_session_report() -> dict:
     common_notes = list(dict.fromkeys(all_notes))[:5]
     strengths = []
     if jd_scores and sum(jd_scores) / len(jd_scores) >= 0.7:
-        strengths.append("岗位 JD 贴合度较好。")
+        strengths.append(_report_text(lang, "岗位 JD 贴合度较好。", "Good alignment with the target JD."))
     if resume_scores and sum(resume_scores) / len(resume_scores) >= 0.7:
-        strengths.append("回答能结合简历和项目经历。")
+        strengths.append(_report_text(lang, "回答能结合简历和项目经历。", "Answers connect well with resume and project experience."))
     if privacy_scores and min(privacy_scores) >= 0.8:
-        strengths.append("隐私风险较低。")
+        strengths.append(_report_text(lang, "隐私风险较低。", "Privacy risk stayed low."))
     if not strengths:
-        strengths.append("已完成多轮问答记录，可继续积累样本。")
+        strengths.append(_report_text(lang, "已完成多轮问答记录，可继续积累样本。", "Multiple interview turns were recorded; keep collecting samples for better review."))
 
-    weaknesses = common_notes or ["暂无明显共性问题。"]
-    recommended_practice = [
-        "继续练习把 Atlas 项目讲成 60 秒和 2 分钟两个版本。",
-        "针对 JD 中的 FastAPI、Electron、Ollama、Whisper/OCR 准备更具体的例子。",
-        "回答后主动补充关键 trade-off、fallback 和 observability。"
-    ]
+    weaknesses = common_notes or [_report_text(lang, "暂无明显共性问题。", "No obvious repeated issue yet.")]
+    recommended_practice = (
+        [
+            "继续练习把 Atlas 项目讲成 60 秒和 2 分钟两个版本。",
+            "针对 JD 中的 FastAPI、Electron、Ollama、Whisper/OCR 准备更具体的例子。",
+            "回答后主动补充关键取舍、兜底方案和可观测性设计。",
+        ]
+        if lang == "zh"
+        else [
+            "Keep practicing 60-second and 2-minute versions of the Atlas project story.",
+            "Prepare more concrete examples for FastAPI, Electron, Ollama, and Whisper/OCR in the JD.",
+            "After each answer, proactively add key trade-offs, fallback plans, and observability details.",
+        ]
+    )
 
     question_reviews = []
     for item in history[-10:]:
         critic = item.get("critic") or {}
         question_reviews.append({
             "question": item.get("question", ""),
-            "source": item.get("source", "unknown"),
-            "agent": item.get("agent", "unknown"),
+            "source": item.get("source", _report_unknown(lang)),
+            "agent": item.get("agent", _report_unknown(lang)),
             "final_score": critic.get("final_score"),
-            "main_weakness": critic.get("main_weakness", "unknown"),
-            "jd_alignment_score": critic.get("jd_alignment_score")
+            "main_weakness": critic.get("main_weakness", _report_unknown(lang)),
+            "jd_alignment_score": critic.get("jd_alignment_score"),
         })
+
+    jd_value = round(sum(jd_scores) / len(jd_scores) * 100) if jd_scores else _report_unknown(lang)
+    resume_value = round(sum(resume_scores) / len(resume_scores) * 100) if resume_scores else _report_unknown(lang)
+    privacy_value = round(min(privacy_scores) * 100) if privacy_scores else _report_unknown(lang)
 
     return {
         "overall_score": overall_score,
-        "summary": f"本轮共记录 {len(history)} 条问答，平均分 {overall_score}。",
+        "summary": _report_text(
+            lang,
+            f"本轮共记录 {len(history)} 条问答，平均分 {overall_score}。",
+            f"This session recorded {len(history)} Q&A turns with an average score of {overall_score}.",
+        ),
         "strengths": strengths,
         "weaknesses": weaknesses,
-        "jd_alignment_summary": f"平均 JD Alignment: {round(sum(jd_scores) / len(jd_scores) * 100) if jd_scores else 'unknown'}%",
-        "resume_alignment_summary": f"平均 Resume Alignment: {round(sum(resume_scores) / len(resume_scores) * 100) if resume_scores else 'unknown'}%",
-        "privacy_risk_summary": f"最低 Privacy Score: {round(min(privacy_scores) * 100) if privacy_scores else 'unknown'}%",
+        "jd_alignment_summary": _report_text(lang, f"平均 JD 匹配度：{jd_value}%", f"Average JD Alignment: {jd_value}%"),
+        "resume_alignment_summary": _report_text(lang, f"平均简历匹配度：{resume_value}%", f"Average Resume Alignment: {resume_value}%"),
+        "privacy_risk_summary": _report_text(lang, f"最低隐私安全分：{privacy_value}%", f"Lowest Privacy Score: {privacy_value}%"),
         "recommended_practice": recommended_practice,
         "question_reviews": question_reviews,
         "best_question": best.get("question") if best else "",
-        "weakest_question": worst.get("question") if worst else ""
+        "weakest_question": worst.get("question") if worst else "",
     }
 
 
-def report_to_markdown(report: dict) -> str:
+def report_to_markdown(report: dict, lang: str = "zh") -> str:
+    lang = _report_lang(lang)
+    if lang == "zh":
+        lines = [
+            "# Atlas 面试复盘报告",
+            "",
+            f"总体得分：{report.get('overall_score', 0)}",
+            "",
+            f"总结：{report.get('summary', '')}",
+            "",
+            "## 亮点",
+            *[f"- {item}" for item in report.get("strengths", [])],
+            "",
+            "## 待改进",
+            *[f"- {item}" for item in report.get("weaknesses", [])],
+            "",
+            "## 推荐练习",
+            *[f"- {item}" for item in report.get("recommended_practice", [])],
+            "",
+            "## 逐题复盘",
+        ]
+        for item in report.get("question_reviews", []):
+            lines.append(
+                f"- {item.get('question', '')} | 得分={item.get('final_score', '未知')} | JD匹配={item.get('jd_alignment_score', '未知')}"
+            )
+        return "\n".join(lines)
+
     lines = [
         "# Atlas Interview Report",
         "",
@@ -2310,7 +2368,7 @@ def report_to_markdown(report: dict) -> str:
         "## Recommended Practice",
         *[f"- {item}" for item in report.get("recommended_practice", [])],
         "",
-        "## Question Reviews"
+        "## Question Reviews",
     ]
     for item in report.get("question_reviews", []):
         lines.append(f"- {item.get('question', '')} | score={item.get('final_score', 'unknown')} | jd={item.get('jd_alignment_score', 'unknown')}")
@@ -2377,14 +2435,14 @@ def mock_state():
 
 
 @app.get("/report/session")
-def report_session():
-    return build_session_report()
+def report_session(lang: str = "zh"):
+    return build_session_report(lang)
 
 
 @app.get("/report/export_markdown")
-def report_export_markdown():
+def report_export_markdown(lang: str = "zh"):
     from fastapi.responses import PlainTextResponse
-    return PlainTextResponse(report_to_markdown(build_session_report()))
+    return PlainTextResponse(report_to_markdown(build_session_report(lang), lang))
 
 
 @app.post("/blackboard/clear_history")

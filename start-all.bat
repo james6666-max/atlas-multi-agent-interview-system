@@ -7,6 +7,7 @@ set "FRONTEND_DIR=%ROOT%interview-assistant-stage4-whisper"
 set "BACKEND_CONDA_ENV=chuangxin"
 set "BACKEND_PORT=8000"
 set "FRONTEND_PORT=54321"
+set "CONDA_EXE=%USERPROFILE%\anaconda3\Scripts\conda.exe"
 
 cd /d "%ROOT%"
 
@@ -22,10 +23,20 @@ if errorlevel 1 goto :done
 call :check_dir "%FRONTEND_DIR%" "Frontend"
 if errorlevel 1 goto :done
 
+if not exist "%CONDA_EXE%" (
+    where conda >nul 2>nul
+    if errorlevel 1 (
+        echo Conda was not found. Expected:
+        echo %CONDA_EXE%
+        goto :done
+    )
+    set "CONDA_EXE=conda"
+)
+
 call :is_port_listening %BACKEND_PORT%
 if errorlevel 1 (
     echo Starting backend on port %BACKEND_PORT%...
-    start "Atlas Backend" cmd /k "cd /d ""%BACKEND_DIR%"" && conda run -n %BACKEND_CONDA_ENV% python -m uvicorn orchestrator_v0:app --host 127.0.0.1 --port %BACKEND_PORT%"
+    start "Atlas Backend" cmd /k "cd /d ""%BACKEND_DIR%"" && ""%CONDA_EXE%"" run -n %BACKEND_CONDA_ENV% python -m uvicorn orchestrator_v0:app --host 127.0.0.1 --port %BACKEND_PORT%"
 ) else (
     echo Backend already running on port %BACKEND_PORT%.
 )

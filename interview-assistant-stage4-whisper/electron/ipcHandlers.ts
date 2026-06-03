@@ -1,12 +1,16 @@
 // ipcHandlers.ts
 
-import { ipcMain, shell } from "electron"
+import { ipcMain, screen, shell } from "electron"
+import type { Rectangle } from "electron"
 import { IIpcHandlerDeps } from "./main"
 import { configHelper } from "./ConfigHelper"
 import { APIProvider } from "../shared/aiModels"
 
 export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
   console.log("Initializing IPC handlers")
+  let restoreBounds: Rectangle | null = null
+  const isWindowMode = (mode: string): mode is "normal" | "stealth" =>
+    mode === "normal" || mode === "stealth"
 
   // Configuration handlers
   ipcMain.handle("get-config", () => {
@@ -138,6 +142,65 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
     }
   )
 
+  ipcMain.handle("adjust-window-size", (_event, delta: number) => {
+    const mainWindow = deps.getMainWindow()
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { success: false, error: "Main window not available" }
+    }
+
+    restoreBounds = null
+    mainWindow.webContents.send("window-maximized-change", false)
+    const bounds = mainWindow.getBounds()
+    const nextWidth = Math.max(420, Math.min(1400, bounds.width + delta))
+    const nextHeight = Math.max(320, Math.min(1000, bounds.height + Math.round(delta * 0.75)))
+    mainWindow.setSize(nextWidth, nextHeight, true)
+    return { success: true, width: nextWidth, height: nextHeight }
+  })
+
+  ipcMain.handle("window-control", (_event, action: "minimize" | "toggle-maximize" | "close") => {
+    const mainWindow = deps.getMainWindow()
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { success: false, error: "Main window not available" }
+    }
+
+    if (action === "minimize") {
+      mainWindow.minimize()
+      return { success: true, isMaximized: restoreBounds !== null }
+    }
+
+    if (action === "toggle-maximize") {
+      if (restoreBounds) {
+        const bounds = restoreBounds
+        restoreBounds = null
+        mainWindow.setBounds(bounds, true)
+        mainWindow.webContents.send("window-maximized-change", false)
+        return { success: true, isMaximized: false }
+      }
+
+      restoreBounds = mainWindow.getBounds()
+      const display = screen.getDisplayMatching(restoreBounds)
+      mainWindow.setBounds(display.workArea, true)
+      mainWindow.webContents.send("window-maximized-change", true)
+      return { success: true, isMaximized: true }
+    }
+
+    restoreBounds = null
+    mainWindow.close()
+    return { success: true }
+  })
+
+  ipcMain.handle("window:get-mode", () => ({
+    success: true,
+    mode: deps.getWindowMode()
+  }))
+
+  ipcMain.handle("window:set-mode", (_event, mode: string) => {
+    if (!isWindowMode(mode)) {
+      return { success: false, error: "Invalid window mode" }
+    }
+    return deps.setWindowMode(mode)
+  })
+
   // Screenshot management handlers
   ipcMain.handle("get-screenshots", async () => {
     try {
@@ -184,6 +247,29 @@ export function initializeIpcHandlers(deps: IIpcHandlerDeps): void {
       } catch (error) {
         console.error("Error triggering screenshot:", error)
         return { error: "Failed to trigger screenshot" }
+      }
+    }
+    return { error: "No main window available" }
+  })
+
+  ipcMain.handle("trigger-region-screenshot", async () => {
+    const mainWindow = deps.getMainWindow()
+    if (mainWindow) {
+      try {
+        const screenshotPath = await deps.takeRegionScreenshot()
+        if (!screenshotPath) {
+          return { success: true, cancelled: true }
+        }
+
+        const preview = await deps.getImagePreview(screenshotPath)
+        mainWindow.webContents.send("screenshot-taken", {
+          path: screenshotPath,
+          preview
+        })
+        return { success: true }
+      } catch (error) {
+        console.error("Error capturing region screenshot:", error)
+        return { error: "Failed to capture region screenshot" }
       }
     }
     return { error: "No main window available" }

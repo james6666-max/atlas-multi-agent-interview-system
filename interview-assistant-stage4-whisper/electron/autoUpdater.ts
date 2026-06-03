@@ -4,6 +4,7 @@ import log from "electron-log"
 
 export function initAutoUpdater() {
   console.log("Initializing auto-updater...")
+  registerUpdateIpcHandlers()
 
   // Skip update checks in development
   if (!app.isPackaged) {
@@ -89,9 +90,21 @@ export function initAutoUpdater() {
       })
   }, 60 * 60 * 1000)
 
-  // Handle IPC messages from renderer
+}
+
+function registerUpdateIpcHandlers() {
+  ipcMain.removeHandler("start-update")
+  ipcMain.removeHandler("install-update")
+
   ipcMain.handle("start-update", async () => {
     console.log("Start update requested")
+    if (!app.isPackaged) {
+      return { success: false, error: "开发模式下不下载自动更新" }
+    }
+    if (!process.env.GH_TOKEN) {
+      return { success: false, error: "缺少 GH_TOKEN,无法下载自动更新" }
+    }
+
     try {
       await autoUpdater.downloadUpdate()
       console.log("Update download completed")
@@ -104,6 +117,7 @@ export function initAutoUpdater() {
 
   ipcMain.handle("install-update", () => {
     console.log("Install update requested")
+    if (!app.isPackaged) return
     autoUpdater.quitAndInstall()
   })
 }

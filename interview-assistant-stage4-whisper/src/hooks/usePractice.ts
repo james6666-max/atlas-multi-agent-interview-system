@@ -49,7 +49,7 @@ export function usePractice() {
       setCurrent(result.next_question ?? null)
       setAnswer("")
       if (result.completed) {
-        const rep = await practiceReport()
+        const rep = await practiceReport("default", lang)
         setReport(rep)
       }
     } catch (err) {
@@ -57,7 +57,7 @@ export function usePractice() {
     } finally {
       setLoading(false)
     }
-  }, [answer, current])
+  }, [answer, current, lang])
 
   const reset = useCallback(() => {
     setState(null)
