@@ -20,6 +20,7 @@ BLACKBOARD_PATH = BACKEND_ROOT / "blackboard_instance.json"
 
 def main() -> int:
     os.environ["USE_OLLAMA"] = "false"
+    os.environ.setdefault("ATLAS_PREWARM_OCR", "0")  # keep eval offline-light
     sys.path.insert(0, str(BACKEND_ROOT))
 
     questions = json.loads(QUESTIONS_PATH.read_text(encoding="utf-8"))

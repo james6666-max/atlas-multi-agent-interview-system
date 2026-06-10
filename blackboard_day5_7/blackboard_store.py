@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from jsonschema import Draft202012Validator
+
+# Bounded growth keeps every read/parse/validate O(1) instead of O(all turns):
+# the session report only uses the last 10 turns and recent context the last 3,
+# so trimming old turns does not change any feature behaviour.
+MAX_HISTORY_ITEMS = 300
+MAX_TRANSCRIPT_ITEMS = 50
 
 
 class BlackboardStore:
@@ -18,24 +25,54 @@ class BlackboardStore:
             raise FileNotFoundError(f"Schema file not found: {self.schema_path}")
         self.schema = json.loads(self.schema_path.read_text(encoding="utf-8"))
         self.validator = Draft202012Validator(self.schema)
+        # (st_mtime_ns, st_size) of the file content we last validated, plus its
+        # version. Lets us skip re-validating a file only we have written, and
+        # answer CAS version checks without re-reading the whole document.
+        self._validated_stat: Optional[Tuple[int, int]] = None
+        self._cached_version: Optional[int] = None
+
+    def _stat_signature(self) -> Tuple[int, int]:
+        stat = self.data_path.stat()
+        return (stat.st_mtime_ns, stat.st_size)
 
     def read(self) -> Dict[str, Any]:
         if not self.data_path.exists():
             raise FileNotFoundError(f"Blackboard data file not found: {self.data_path}")
+        signature = self._stat_signature()
         data = json.loads(self.data_path.read_text(encoding="utf-8"))
-        self.validate(data)
+        if signature != self._validated_stat:
+            self.validate(data)
+            self._validated_stat = signature
+        self._cached_version = data.get("version")
         return data
+
+    def _current_version(self) -> Optional[int]:
+        if self._validated_stat is not None and self._stat_signature() == self._validated_stat:
+            return self._cached_version
+        return self.read().get("version")
 
     def write(self, data: Dict[str, Any], expected_version: Optional[int] = None) -> Dict[str, Any]:
         if self.data_path.exists() and expected_version is not None:
-            current = self.read()
-            if current.get("version") != expected_version:
-                raise ValueError(f"Version conflict: current={current.get('version')}, expected={expected_version}")
+            current_version = self._current_version()
+            if current_version != expected_version:
+                raise ValueError(f"Version conflict: current={current_version}, expected={expected_version}")
         data["version"] = int(data.get("version", 0)) + 1
         data["updated_at"] = int(time.time())
+        self._trim(data)
         self.validate(data)
         self.data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._validated_stat = self._stat_signature()
+        self._cached_version = data["version"]
         return data
+
+    @staticmethod
+    def _trim(data: Dict[str, Any]) -> None:
+        history = data.get("history")
+        if isinstance(history, list) and len(history) > MAX_HISTORY_ITEMS:
+            del history[:-MAX_HISTORY_ITEMS]
+        transcript = (data.get("rolling_context") or {}).get("recent_transcript")
+        if isinstance(transcript, list) and len(transcript) > MAX_TRANSCRIPT_ITEMS:
+            del transcript[:-MAX_TRANSCRIPT_ITEMS]
 
     def validate(self, data: Dict[str, Any]) -> None:
         errors = sorted(self.validator.iter_errors(data), key=lambda e: e.path)
@@ -68,9 +105,9 @@ class BlackboardStore:
     def append_history(self, question: str, answer: str, agent: str, question_type: str = "Unknown", critic: Optional[Dict[str, Any]] = None, source: str = "manual_input") -> Dict[str, Any]:
         data = self.read()
         expected_version = data["version"]
-        turn_id = f"turn-{len(data.get('history', [])) + 1:03d}"
+        history = data.setdefault("history", [])
         history_item: Dict[str, Any] = {
-            "turn_id": turn_id,
+            "turn_id": f"turn-{_next_turn_number(history):03d}",
             "question": question,
             "question_type": question_type,
             "answer": answer,
@@ -80,5 +117,13 @@ class BlackboardStore:
         }
         if critic:
             history_item["critic"] = critic
-        data.setdefault("history", []).append(history_item)
+        history.append(history_item)
         return self.write(data, expected_version=expected_version)
+
+
+def _next_turn_number(history: list) -> int:
+    """Monotonic turn number that stays unique even after old turns are trimmed."""
+    if not history:
+        return 1
+    match = re.search(r"(\d+)$", str(history[-1].get("turn_id", "")))
+    return int(match.group(1)) + 1 if match else len(history) + 1

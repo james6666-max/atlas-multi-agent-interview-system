@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 import tempfile
 import os
@@ -169,14 +170,37 @@ def transcribe_audio_file(audio_path: str, language: str = "auto") -> str:
 
 
 _ocr_engine = None
+_ocr_lock = threading.Lock()
 
 
 def get_ocr_engine():
     global _ocr_engine
     if _ocr_engine is None:
-        from rapidocr_onnxruntime import RapidOCR  # lazy: avoid loading onnxruntime/cv2 at startup
-        _ocr_engine = RapidOCR()
+        with _ocr_lock:  # pre-warm thread and first request may race here
+            if _ocr_engine is None:
+                from rapidocr_onnxruntime import RapidOCR  # lazy: avoid loading onnxruntime/cv2 at startup
+                _ocr_engine = RapidOCR()
     return _ocr_engine
+
+
+@app.on_event("startup")
+def _prewarm_ocr_in_background() -> None:
+    """Load the OCR model shortly after boot so the first screenshot ask
+    (Ctrl+Shift+A) doesn't pay the multi-second model load. Startup itself
+    stays fast (the load runs in a daemon thread) and this is a no-op when
+    the OCR stack isn't bundled. Disable with ATLAS_PREWARM_OCR=0."""
+    if os.getenv("ATLAS_PREWARM_OCR", "1").lower() in {"0", "false"}:
+        return
+
+    def _load() -> None:
+        time.sleep(2)  # let the server finish booting before the heavy import
+        try:
+            get_ocr_engine()
+            print("[startup] OCR engine pre-warmed")
+        except Exception as exc:  # e.g. OCR not bundled in a minimal build
+            print(f"[startup] OCR pre-warm skipped: {exc}")
+
+    threading.Thread(target=_load, name="ocr-prewarm", daemon=True).start()
 
 
 def extract_text_from_image(image_path: str) -> str:

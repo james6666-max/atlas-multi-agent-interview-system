@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
 import pytest
+
+# Tests spin up many TestClients; don't let each startup hook kick off a
+# background OCR model load.
+os.environ.setdefault("ATLAS_PREWARM_OCR", "0")
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
