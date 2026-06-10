@@ -2,7 +2,8 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { app } from "electron";
+import { app, BrowserWindow, ipcMain, nativeImage, screen } from "electron";
+import type { Rectangle } from "electron";
 import { v4 as uuidv4 } from "uuid";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -175,6 +176,229 @@ export class ScreenshotHelper {
     }
   }
 
+  private async chooseScreenshotRegion(): Promise<Rectangle | null> {
+    const display = screen.getPrimaryDisplay();
+    const channelId = uuidv4();
+    const selectedChannel = `region-screenshot-selected-${channelId}`;
+    const cancelChannel = `region-screenshot-cancel-${channelId}`;
+    const overlay = new BrowserWindow({
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+      frame: false,
+      fullscreen: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      focusable: true,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false,
+      },
+    });
+
+    overlay.setAlwaysOnTop(true, "screen-saver", 2);
+
+    const html = `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        cursor: crosshair;
+        user-select: none;
+        background: rgba(0, 0, 0, 0.38);
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      .hint {
+        position: fixed;
+        left: 50%;
+        top: 28px;
+        transform: translateX(-50%);
+        padding: 8px 12px;
+        border-radius: 6px;
+        background: rgba(10, 12, 18, 0.88);
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 13px;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+        pointer-events: none;
+      }
+      .selection {
+        position: fixed;
+        display: none;
+        border: 2px solid #60a5fa;
+        background: rgba(96, 165, 250, 0.18);
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.24);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hint">拖拽选择截图区域，Esc 或右键取消</div>
+    <div id="selection" class="selection"></div>
+    <script>
+      const { ipcRenderer } = require("electron");
+      const box = document.getElementById("selection");
+      let start = null;
+      let active = false;
+
+      function draw(current) {
+        const x = Math.min(start.x, current.x);
+        const y = Math.min(start.y, current.y);
+        const width = Math.abs(current.x - start.x);
+        const height = Math.abs(current.y - start.y);
+        box.style.display = "block";
+        box.style.left = x + "px";
+        box.style.top = y + "px";
+        box.style.width = width + "px";
+        box.style.height = height + "px";
+      }
+
+      window.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) {
+          ipcRenderer.send("${cancelChannel}");
+          return;
+        }
+        active = true;
+        start = { x: event.clientX, y: event.clientY };
+        draw(start);
+      });
+
+      window.addEventListener("mousemove", (event) => {
+        if (!active || !start) return;
+        draw({ x: event.clientX, y: event.clientY });
+      });
+
+      window.addEventListener("mouseup", (event) => {
+        if (!active || !start || event.button !== 0) return;
+        active = false;
+        const x = Math.min(start.x, event.clientX);
+        const y = Math.min(start.y, event.clientY);
+        const width = Math.abs(event.clientX - start.x);
+        const height = Math.abs(event.clientY - start.y);
+        if (width < 8 || height < 8) {
+          ipcRenderer.send("${cancelChannel}");
+          return;
+        }
+        ipcRenderer.send("${selectedChannel}", { x, y, width, height });
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") ipcRenderer.send("${cancelChannel}");
+      });
+
+      window.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        ipcRenderer.send("${cancelChannel}");
+      });
+    </script>
+  </body>
+</html>`;
+
+    return await new Promise<Rectangle | null>((resolve) => {
+      let resolved = false;
+      const finish = (region: Rectangle | null) => {
+        if (resolved) return;
+        resolved = true;
+        ipcMain.removeAllListeners(selectedChannel);
+        ipcMain.removeAllListeners(cancelChannel);
+        overlay.close();
+        resolve(region);
+      };
+
+      ipcMain.once(selectedChannel, (_event, region: Rectangle) => finish(region));
+      ipcMain.once(cancelChannel, () => finish(null));
+      overlay.once("closed", () => finish(null));
+      overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      overlay.show();
+      overlay.focus();
+    });
+  }
+
+  private cropScreenshotBuffer(screenshotBuffer: Buffer, selection: Rectangle, displayBounds: Rectangle): Buffer {
+    const image = nativeImage.createFromBuffer(screenshotBuffer);
+    const imageSize = image.getSize();
+    const displays = screen.getAllDisplays();
+    const left = Math.min(...displays.map((display) => display.bounds.x));
+    const top = Math.min(...displays.map((display) => display.bounds.y));
+    const right = Math.max(...displays.map((display) => display.bounds.x + display.bounds.width));
+    const bottom = Math.max(...displays.map((display) => display.bounds.y + display.bounds.height));
+    const virtualWidth = right - left;
+    const virtualHeight = bottom - top;
+    const scaleX = imageSize.width / virtualWidth;
+    const scaleY = imageSize.height / virtualHeight;
+
+    // TODO: Multi-display + mixed-DPI setups may need per-display scaling. This
+    // maps primary-display DIP coordinates into the captured virtual desktop.
+    const cropRect = {
+      x: Math.max(0, Math.round((displayBounds.x + selection.x - left) * scaleX)),
+      y: Math.max(0, Math.round((displayBounds.y + selection.y - top) * scaleY)),
+      width: Math.max(1, Math.round(selection.width * scaleX)),
+      height: Math.max(1, Math.round(selection.height * scaleY)),
+    };
+
+    cropRect.width = Math.min(cropRect.width, imageSize.width - cropRect.x);
+    cropRect.height = Math.min(cropRect.height, imageSize.height - cropRect.y);
+
+    return image.crop(cropRect).toPNG();
+  }
+
+  private async saveScreenshotBuffer(screenshotBuffer: Buffer): Promise<string> {
+    let screenshotPath = "";
+
+    if (this.view === "queue") {
+      screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`);
+      const screenshotDir = path.dirname(screenshotPath);
+      if (!fs.existsSync(screenshotDir)) {
+        fs.mkdirSync(screenshotDir, { recursive: true });
+      }
+      await fs.promises.writeFile(screenshotPath, screenshotBuffer);
+      console.log("Adding screenshot to main queue:", screenshotPath);
+      this.screenshotQueue.push(screenshotPath);
+      if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
+        const removedPath = this.screenshotQueue.shift();
+        if (removedPath) {
+          try {
+            await fs.promises.unlink(removedPath);
+            console.log("Removed old screenshot from main queue:", removedPath);
+          } catch (error) {
+            console.error("Error removing old screenshot:", error);
+          }
+        }
+      }
+    } else {
+      screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`);
+      const screenshotDir = path.dirname(screenshotPath);
+      if (!fs.existsSync(screenshotDir)) {
+        fs.mkdirSync(screenshotDir, { recursive: true });
+      }
+      await fs.promises.writeFile(screenshotPath, screenshotBuffer);
+      console.log("Adding screenshot to extra queue:", screenshotPath);
+      this.extraScreenshotQueue.push(screenshotPath);
+      if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
+        const removedPath = this.extraScreenshotQueue.shift();
+        if (removedPath) {
+          try {
+            await fs.promises.unlink(removedPath);
+            console.log("Removed old screenshot from extra queue:", removedPath);
+          } catch (error) {
+            console.error("Error removing old screenshot:", error);
+          }
+        }
+      }
+    }
+
+    return screenshotPath;
+  }
+
   /**
    * Windows-specific screenshot capture with multiple fallback mechanisms
    */
@@ -301,61 +525,51 @@ export class ScreenshotHelper {
         throw new Error("Screenshot capture returned empty buffer");
       }
 
-      // Save and manage the screenshot based on current view
-      if (this.view === "queue") {
-        screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`);
-        const screenshotDir = path.dirname(screenshotPath);
-        if (!fs.existsSync(screenshotDir)) {
-          fs.mkdirSync(screenshotDir, { recursive: true });
-        }
-        await fs.promises.writeFile(screenshotPath, screenshotBuffer);
-        console.log("Adding screenshot to main queue:", screenshotPath);
-        this.screenshotQueue.push(screenshotPath);
-        if (this.screenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.screenshotQueue.shift();
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath);
-              console.log(
-                "Removed old screenshot from main queue:",
-                removedPath
-              );
-            } catch (error) {
-              console.error("Error removing old screenshot:", error);
-            }
-          }
-        }
-      } else {
-        // In solutions view, only add to extra queue
-        screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`);
-        const screenshotDir = path.dirname(screenshotPath);
-        if (!fs.existsSync(screenshotDir)) {
-          fs.mkdirSync(screenshotDir, { recursive: true });
-        }
-        await fs.promises.writeFile(screenshotPath, screenshotBuffer);
-        console.log("Adding screenshot to extra queue:", screenshotPath);
-        this.extraScreenshotQueue.push(screenshotPath);
-        if (this.extraScreenshotQueue.length > this.MAX_SCREENSHOTS) {
-          const removedPath = this.extraScreenshotQueue.shift();
-          if (removedPath) {
-            try {
-              await fs.promises.unlink(removedPath);
-              console.log(
-                "Removed old screenshot from extra queue:",
-                removedPath
-              );
-            } catch (error) {
-              console.error("Error removing old screenshot:", error);
-            }
-          }
-        }
-      }
+      screenshotPath = await this.saveScreenshotBuffer(screenshotBuffer);
     } catch (error) {
       console.error("Screenshot error:", error);
       throw error;
     } finally {
       // Increased delay for showing window again
       await new Promise((resolve) => setTimeout(resolve, 200));
+      showMainWindow();
+    }
+
+    return screenshotPath;
+  }
+
+  public async takeRegionScreenshot(
+    hideMainWindow: () => void,
+    showMainWindow: () => void
+  ): Promise<string | null> {
+    console.log("Taking region screenshot in view:", this.view);
+    const display = screen.getPrimaryDisplay();
+    hideMainWindow();
+
+    const hideDelay = process.platform === "win32" ? 300 : 180;
+    await new Promise((resolve) => setTimeout(resolve, hideDelay));
+
+    let screenshotPath = "";
+    try {
+      const selection = await this.chooseScreenshotRegion();
+      if (!selection) {
+        console.log("Region screenshot cancelled");
+        return null;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      const screenshotBuffer = await this.captureScreenshot();
+      if (!screenshotBuffer || screenshotBuffer.length === 0) {
+        throw new Error("Screenshot capture returned empty buffer");
+      }
+
+      const croppedBuffer = this.cropScreenshotBuffer(screenshotBuffer, selection, display.bounds);
+      screenshotPath = await this.saveScreenshotBuffer(croppedBuffer);
+    } catch (error) {
+      console.error("Region screenshot error:", error);
+      throw error;
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 150));
       showMainWindow();
     }
 

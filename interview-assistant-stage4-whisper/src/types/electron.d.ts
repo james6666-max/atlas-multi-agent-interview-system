@@ -8,6 +8,12 @@ export interface ElectronAPI {
     width: number
     height: number
   }) => Promise<void>
+  adjustWindowSize: (delta: number) => Promise<{ success: boolean; width?: number; height?: number; error?: string }>
+  windowControl: (action: "minimize" | "toggle-maximize" | "close") => Promise<{ success: boolean; isMaximized?: boolean; error?: string }>
+  onWindowMaximizedChange: (callback: (isMaximized: boolean) => void) => () => void
+  getWindowMode: () => Promise<{ success: boolean; mode: "normal" | "stealth" }>
+  setWindowMode: (mode: "normal" | "stealth") => Promise<{ success: boolean; mode?: "normal" | "stealth"; error?: string }>
+  onWindowModeChanged: (callback: (mode: "normal" | "stealth") => void) => () => void
   clearStore: () => Promise<{ success: boolean; error?: string }>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
   deleteScreenshot: (
@@ -29,6 +35,7 @@ export interface ElectronAPI {
   openExternal: (url: string) => void
   toggleMainWindow: () => Promise<{ success: boolean; error?: string }>
   triggerScreenshot: () => Promise<{ success: boolean; error?: string }>
+  triggerRegionScreenshot: () => Promise<{ success: boolean; cancelled?: boolean; error?: string }>
   triggerProcessScreenshots: () => Promise<{ success: boolean; error?: string }>
   triggerReset: () => Promise<{ success: boolean; error?: string }>
   triggerMoveLeft: () => Promise<{ success: boolean; error?: string }>

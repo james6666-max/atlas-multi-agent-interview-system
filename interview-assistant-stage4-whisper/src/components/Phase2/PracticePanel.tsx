@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { usePractice } from "../../hooks/usePractice"
 import { useI18n } from "../../i18n/LanguageProvider"
+import { localizeReport } from "../../utils/localizeReport"
 import { Markdown } from "./Markdown"
 
 function scoreColor(score: number | null | undefined): string {
@@ -11,9 +12,10 @@ function scoreColor(score: number | null | undefined): string {
 }
 
 export function PracticePanel() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const typeLabel = (type: string) => t(`qtype.${type}`, type)
   const p = usePractice()
+  const report = localizeReport(p.report, lang)
   const [count, setCount] = useState(5)
   const idle = !p.state
   const inSession = p.active && p.current
@@ -130,24 +132,24 @@ export function PracticePanel() {
       )}
 
       {/* Completed: report */}
-      {p.completed && p.report && (
+      {p.completed && report && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
             <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{t("practice.totalScore")}</span>
-            <span style={{ fontSize: 30, fontWeight: 700, color: scoreColor(p.report.overall_score) }}>
-              {p.report.overall_score}
+            <span style={{ fontSize: 30, fontWeight: 700, color: scoreColor(report.overall_score) }}>
+              {report.overall_score}
             </span>
           </div>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{p.report.summary}</p>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)" }}>{report.summary}</p>
 
-          <ReportBlock title={t("practice.strengths")} items={p.report.strengths} />
-          <ReportBlock title={t("practice.weaknesses")} items={p.report.weaknesses} />
-          <ReportBlock title={t("practice.recommended")} items={p.report.recommended_practice} />
+          <ReportBlock title={t("practice.strengths")} items={report.strengths} />
+          <ReportBlock title={t("practice.weaknesses")} items={report.weaknesses} />
+          <ReportBlock title={t("practice.recommended")} items={report.recommended_practice} />
 
           <div>
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginBottom: 6 }}>{t("practice.perQuestion")}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {p.report.question_reviews.map((r, i) => (
+              {report.question_reviews.map((r, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, fontSize: 12, alignItems: "center" }}>
                   <strong style={{ color: scoreColor(r.score), minWidth: 34 }}>{r.score}</strong>
                   <span style={{ color: "rgba(255,255,255,0.5)", minWidth: 56 }}>

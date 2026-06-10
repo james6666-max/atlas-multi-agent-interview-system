@@ -12,11 +12,13 @@ import * as dotenv from "dotenv"
 
 // Constants
 const isDev = process.env.NODE_ENV === "development"
+type WindowMode = "normal" | "stealth"
 
 // Application State
 const state = {
   // Window management properties
   mainWindow: null as BrowserWindow | null,
+  windowMode: "normal" as WindowMode,
   isWindowVisible: false,
   windowPosition: null as { x: number; y: number } | null,
   windowSize: null as { width: number; height: number } | null,
@@ -95,6 +97,8 @@ export interface IShortcutsHelperDeps {
 
 export interface IIpcHandlerDeps {
   getMainWindow: () => BrowserWindow | null
+  getWindowMode: () => WindowMode
+  setWindowMode: (mode: WindowMode) => { success: boolean; mode?: WindowMode; error?: string }
   setWindowDimensions: (width: number, height: number) => void
   getScreenshotQueue: () => string[]
   getExtraScreenshotQueue: () => string[]
@@ -105,6 +109,7 @@ export interface IIpcHandlerDeps {
   processingHelper: ProcessingHelper | null
   PROCESSING_EVENTS: typeof state.PROCESSING_EVENTS
   takeScreenshot: () => Promise<string>
+  takeRegionScreenshot: () => Promise<string | null>
   getView: () => "queue" | "solutions" | "debug"
   toggleMainWindow: () => void
   clearQueues: () => void
@@ -133,6 +138,7 @@ async function initializeHelpers() {
     getExtraScreenshotQueue,
     clearQueues,
     takeScreenshot,
+    takeRegionScreenshot,
     getImagePreview,
     deleteScreenshot,
     setHasDebugged,
@@ -229,16 +235,16 @@ async function createWindow(): Promise<void> {
   state.currentY = 50
 
   const windowSettings: Electron.BrowserWindowConstructorOptions = {
-    width: 800,
-    height: 600,
-    minWidth: 750,
-    minHeight: 550,
+    width: 820,
+    height: 620,
+    minWidth: 420,
+    minHeight: 320,
     x: state.currentX,
     y: 50,
-    alwaysOnTop: true,
-    resizable: true,     // 👈 新加
-  minimizable: true,   // 👈 新加
-  maximizable: true,   // 👈 新加
+    alwaysOnTop: false,
+    resizable: true,
+    minimizable: true,
+    maximizable: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -253,9 +259,10 @@ async function createWindow(): Promise<void> {
     opacity: 1.0,  // Start with full opacity
     backgroundColor: "#00000000",
     focusable: true,
-    skipTaskbar: true,
+    skipTaskbar: false,
     paintWhenInitiallyHidden: true,
     titleBarStyle: "hidden" as const,
+    thickFrame: true,
     enableLargerThanScreen: true,
     movable: true
   }
@@ -330,14 +337,6 @@ async function createWindow(): Promise<void> {
     return { action: "allow" };
   })
 
-  // Enhanced screen capture resistance
-  state.mainWindow.setContentProtection(true)
-
-  state.mainWindow.setVisibleOnAllWorkspaces(true, {
-    visibleOnFullScreen: true
-  })
-  state.mainWindow.setAlwaysOnTop(true, "screen-saver", 1)
-
   // Additional screen capture resistance settings
   if (process.platform === "darwin") {
     // Prevent window from being captured in screenshots
@@ -359,6 +358,12 @@ async function createWindow(): Promise<void> {
   // Set up window listeners
   state.mainWindow.on("move", handleWindowMove)
   state.mainWindow.on("resize", handleWindowResize)
+  state.mainWindow.on("maximize", () => {
+    state.mainWindow?.webContents.send("window-maximized-change", true)
+  })
+  state.mainWindow.on("unmaximize", () => {
+    state.mainWindow?.webContents.send("window-maximized-change", false)
+  })
   state.mainWindow.on("closed", handleWindowClosed)
 
   // Initialize window state
@@ -369,23 +374,8 @@ async function createWindow(): Promise<void> {
   state.currentY = bounds.y
   state.isWindowVisible = true
   
-  // Set opacity based on user preferences or hide initially
-  // Ensure the window is visible for the first launch or if opacity > 0.1
-  const savedOpacity = configHelper.getOpacity();
-  console.log(`Initial opacity from config: ${savedOpacity}`);
-  
-  // Always make sure window is shown first
-  state.mainWindow.showInactive(); // Use showInactive for consistency
-  
-  if (savedOpacity <= 0.1) {
-    console.log('Initial opacity too low, setting to 0 and hiding window');
-    state.mainWindow.setOpacity(0);
-    state.isWindowVisible = false;
-  } else {
-    console.log(`Setting initial opacity to ${savedOpacity}`);
-    state.mainWindow.setOpacity(savedOpacity);
-    state.isWindowVisible = true;
-  }
+  state.mainWindow.show()
+  setWindowMode("normal")
 }
 
 function handleWindowMove(): void {
@@ -407,6 +397,55 @@ function handleWindowClosed(): void {
   state.isWindowVisible = false
   state.windowPosition = null
   state.windowSize = null
+}
+
+function applyNormalMode(window: BrowserWindow): void {
+  window.setIgnoreMouseEvents(false)
+  window.setResizable(true)
+  window.setMovable(true)
+  window.setSkipTaskbar(false)
+  window.setContentProtection(false)
+  window.setAlwaysOnTop(false)
+  window.setVisibleOnAllWorkspaces(false)
+  window.setOpacity(1)
+}
+
+function applyStealthMode(window: BrowserWindow): void {
+  window.setIgnoreMouseEvents(false)
+  window.setResizable(true)
+  window.setMovable(true)
+  window.setSkipTaskbar(true)
+  window.setContentProtection(true)
+  window.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true
+  })
+  window.setAlwaysOnTop(true, "screen-saver", 1)
+  window.setOpacity(Math.max(0.25, configHelper.getOpacity()))
+}
+
+function setWindowMode(mode: WindowMode): { success: boolean; mode?: WindowMode; error?: string } {
+  if (mode !== "normal" && mode !== "stealth") {
+    return { success: false, error: "Invalid window mode" }
+  }
+  if (!state.mainWindow || state.mainWindow.isDestroyed()) {
+    return { success: false, error: "Main window not available" }
+  }
+
+  const bounds = state.mainWindow.getBounds()
+  if (mode === "normal") {
+    applyNormalMode(state.mainWindow)
+  } else {
+    applyStealthMode(state.mainWindow)
+  }
+  state.mainWindow.setBounds(bounds)
+  state.windowMode = mode
+  state.windowPosition = { x: bounds.x, y: bounds.y }
+  state.windowSize = { width: bounds.width, height: bounds.height }
+  state.currentX = bounds.x
+  state.currentY = bounds.y
+  state.isWindowVisible = true
+  state.mainWindow.webContents.send("window-mode-changed", mode)
+  return { success: true, mode }
 }
 
 // Window visibility functions
@@ -431,14 +470,14 @@ function showMainWindow(): void {
       });
     }
     state.mainWindow!.setIgnoreMouseEvents(false);
-    state.mainWindow!.setAlwaysOnTop(true, "screen-saver", 1);
-    state.mainWindow!.setVisibleOnAllWorkspaces(true, {
-      visibleOnFullScreen: true
-    });
-    state.mainWindow!.setContentProtection(true);
     state.mainWindow!.setOpacity(0); // Set opacity to 0 before showing
     state.mainWindow!.showInactive(); // Use showInactive instead of show+focus
     state.mainWindow!.setOpacity(1); // Then set opacity to 1 after showing
+    if (state.windowMode === "normal") {
+      applyNormalMode(state.mainWindow!)
+    } else {
+      applyStealthMode(state.mainWindow!)
+    }
     state.isWindowVisible = true;
     console.log('Window shown with showInactive(), opacity set to 1');
   }
@@ -560,6 +599,8 @@ async function initializeApp() {
     await initializeHelpers()
     initializeIpcHandlers({
       getMainWindow,
+      getWindowMode,
+      setWindowMode,
       setWindowDimensions,
       getScreenshotQueue,
       getExtraScreenshotQueue,
@@ -568,6 +609,7 @@ async function initializeApp() {
       processingHelper: state.processingHelper,
       PROCESSING_EVENTS: state.PROCESSING_EVENTS,
       takeScreenshot,
+      takeRegionScreenshot,
       getView,
       toggleMainWindow,
       clearQueues,
@@ -653,6 +695,10 @@ function getMainWindow(): BrowserWindow | null {
   return state.mainWindow
 }
 
+function getWindowMode(): WindowMode {
+  return state.windowMode
+}
+
 function getView(): "queue" | "solutions" | "debug" {
   return state.view
 }
@@ -695,6 +741,16 @@ async function takeScreenshot(): Promise<string> {
       () => hideMainWindow(),
       () => showMainWindow()
     ) || ""
+  )
+}
+
+async function takeRegionScreenshot(): Promise<string | null> {
+  if (!state.mainWindow) throw new Error("No main window available")
+  return (
+    state.screenshotHelper?.takeRegionScreenshot(
+      () => hideMainWindow(),
+      () => showMainWindow()
+    ) || null
   )
 }
 

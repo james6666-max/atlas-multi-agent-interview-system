@@ -27,6 +27,7 @@ interface InputWorkspacePageProps {
   ragStatus: any
   localAskLoading: boolean
   onAskImage: () => void
+  onAskRegionImage: () => void
   voiceLanguage: "Unknown" | "Chinese" | "English"
   onVoiceLanguageChange: (value: "Unknown" | "Chinese" | "English") => void
   voiceRecording: boolean
@@ -83,6 +84,7 @@ export default function InputWorkspacePage({
   ragStatus,
   localAskLoading,
   onAskImage,
+  onAskRegionImage,
   voiceLanguage,
   onVoiceLanguageChange,
   voiceRecording,
@@ -136,9 +138,14 @@ export default function InputWorkspacePage({
       </div>
 
       {activeTab === "ocr" && (
-        <button className="legacy-primary-button" onClick={onAskImage} disabled={localAskLoading}>
-          {localAskLoading ? t("common.processing") : t("ocr.capture")}
-        </button>
+        <div className="legacy-button-row">
+          <button className="legacy-primary-button" onClick={onAskImage} disabled={localAskLoading}>
+            {localAskLoading ? t("common.processing") : t("ocr.capture")}
+          </button>
+          <button className="legacy-secondary-button" onClick={onAskRegionImage} disabled={localAskLoading}>
+            区域截图
+          </button>
+        </div>
       )}
 
       {activeTab === "voice" && (

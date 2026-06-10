@@ -32,6 +32,27 @@ const electronAPI = {
   openSettingsPortal: () => ipcRenderer.invoke("open-settings-portal"),
   updateContentDimensions: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke("update-content-dimensions", dimensions),
+  adjustWindowSize: (delta: number) =>
+    ipcRenderer.invoke("adjust-window-size", delta),
+  windowControl: (action: "minimize" | "toggle-maximize" | "close") =>
+    ipcRenderer.invoke("window-control", action),
+  onWindowMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+    const subscription = (_: any, isMaximized: boolean) => callback(isMaximized)
+    ipcRenderer.on("window-maximized-change", subscription)
+    return () => {
+      ipcRenderer.removeListener("window-maximized-change", subscription)
+    }
+  },
+  getWindowMode: () => ipcRenderer.invoke("window:get-mode"),
+  setWindowMode: (mode: "normal" | "stealth") =>
+    ipcRenderer.invoke("window:set-mode", mode),
+  onWindowModeChanged: (callback: (mode: "normal" | "stealth") => void) => {
+    const subscription = (_: any, mode: "normal" | "stealth") => callback(mode)
+    ipcRenderer.on("window-mode-changed", subscription)
+    return () => {
+      ipcRenderer.removeListener("window-mode-changed", subscription)
+    }
+  },
   clearStore: () => ipcRenderer.invoke("clear-store"),
   getScreenshots: () => ipcRenderer.invoke("get-screenshots"),
   deleteScreenshot: (path: string) =>
@@ -148,6 +169,7 @@ const electronAPI = {
   // External URL handler
   openLink: (url: string) => shell.openExternal(url),
   triggerScreenshot: () => ipcRenderer.invoke("trigger-screenshot"),
+  triggerRegionScreenshot: () => ipcRenderer.invoke("trigger-region-screenshot"),
   triggerProcessScreenshots: () =>
     ipcRenderer.invoke("trigger-process-screenshots"),
   triggerReset: () => ipcRenderer.invoke("trigger-reset"),

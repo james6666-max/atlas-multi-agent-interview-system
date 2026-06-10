@@ -39,47 +39,68 @@ export function useImageAsk(onCompleted?: () => void) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState("")
 
+  const captureAndUpload = useCallback(async (
+    trigger: () => Promise<any>,
+    captureLabel: string,
+    filename: string
+  ) => {
+    setResult(captureLabel)
+    return await new Promise<any>((resolve, reject) => {
+      let finished = false
+      const unsubscribe = window.electronAPI.onScreenshotTaken(async (data: { path: string; preview: string }) => {
+        if (finished) return
+        finished = true
+        try {
+          setResult("Uploading screenshot to OCR...")
+          const imageFile = await dataUrlToFile(data.preview, filename)
+          const json = await postImageFileToAtlas(imageFile, imageFile.name, apiLanguage)
+          if (typeof unsubscribe === "function") unsubscribe()
+          resolve(json)
+        } catch (error) {
+          if (typeof unsubscribe === "function") unsubscribe()
+          reject(error)
+        }
+      })
+
+      trigger()
+        .then((screenshotResult: any) => {
+          if (screenshotResult?.cancelled) {
+            finished = true
+            if (typeof unsubscribe === "function") unsubscribe()
+            resolve({ cancelled: true })
+            return
+          }
+          if (screenshotResult?.error) {
+            finished = true
+            if (typeof unsubscribe === "function") unsubscribe()
+            reject(new Error(screenshotResult.error))
+          }
+        })
+        .catch((error: any) => {
+          finished = true
+          if (typeof unsubscribe === "function") unsubscribe()
+          reject(error)
+        })
+
+      window.setTimeout(() => {
+        if (finished) return
+        finished = true
+        if (typeof unsubscribe === "function") unsubscribe()
+        reject(new Error("Screenshot timed out. Please try again."))
+      }, 30000)
+    })
+  }, [apiLanguage])
+
   const submitImage = useCallback(async () => {
     try {
       setLoading(true)
 
       if (window.electronAPI?.triggerScreenshot) {
-        setResult("Taking screenshot...")
-        const response = await new Promise<any>((resolve, reject) => {
-          let finished = false
-          const unsubscribe = window.electronAPI.onScreenshotTaken(async (data: { path: string; preview: string }) => {
-            if (finished) return
-            finished = true
-            try {
-              setResult("Uploading screenshot to OCR...")
-              const imageFile = await dataUrlToFile(data.preview, "screenshot.png")
-              const json = await postImageFileToAtlas(imageFile, imageFile.name, apiLanguage)
-              if (typeof unsubscribe === "function") unsubscribe()
-              resolve(json)
-            } catch (error) {
-              if (typeof unsubscribe === "function") unsubscribe()
-              reject(error)
-            }
-          })
-          window.electronAPI.triggerScreenshot()
-            .then((screenshotResult: any) => {
-              if (screenshotResult?.error) {
-                if (typeof unsubscribe === "function") unsubscribe()
-                reject(new Error(screenshotResult.error))
-              }
-            })
-            .catch((error: any) => {
-              if (typeof unsubscribe === "function") unsubscribe()
-              reject(error)
-            })
-
-          window.setTimeout(() => {
-            if (finished) return
-            finished = true
-            if (typeof unsubscribe === "function") unsubscribe()
-            reject(new Error("Screenshot timed out. Please try again."))
-          }, 15000)
-        })
+        const response = await captureAndUpload(
+          () => window.electronAPI.triggerScreenshot(),
+          "Taking screenshot...",
+          "screenshot.png"
+        )
 
         if (response?.detail) {
           setResult(`Request failed: ${response.detail}`)
@@ -126,7 +147,46 @@ export function useImageAsk(onCompleted?: () => void) {
     } finally {
       setLoading(false)
     }
-  }, [onCompleted, apiLanguage])
+  }, [onCompleted, captureAndUpload, apiLanguage])
+
+  const submitRegionImage = useCallback(async () => {
+    try {
+      setLoading(true)
+
+      if (!window.electronAPI?.triggerRegionScreenshot) {
+        setResult("Region screenshot is not available in this environment.")
+        return
+      }
+
+      const response = await captureAndUpload(
+        () => window.electronAPI.triggerRegionScreenshot(),
+        "Select a screenshot region...",
+        "region-screenshot.png"
+      )
+
+      if (response?.cancelled) {
+        setResult("Region screenshot cancelled")
+        return
+      }
+      if (response?.detail) {
+        setResult(`Request failed: ${response.detail}`)
+        return
+      }
+
+      setResult(formatAskResult(response))
+      onCompleted?.()
+    } catch (error: any) {
+      console.error("Local ask region image failed:", error)
+      setResult([
+        "Region screenshot question failed",
+        "",
+        "Please check whether the FastAPI backend is running.",
+        `Error: ${error?.message ?? String(error)}`
+      ].join("\n"))
+    } finally {
+      setLoading(false)
+    }
+  }, [onCompleted, captureAndUpload])
 
   const clearImage = useCallback(() => setResult(""), [])
 
@@ -134,6 +194,7 @@ export function useImageAsk(onCompleted?: () => void) {
     loading,
     result,
     submitImage,
+    submitRegionImage,
     clearImage
   }
 }

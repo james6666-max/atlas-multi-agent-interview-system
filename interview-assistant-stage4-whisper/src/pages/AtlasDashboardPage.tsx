@@ -10,6 +10,8 @@ import {
 } from "../components/ui/toast"
 import { DashboardHeader } from "../components/Dashboard/DashboardHeader"
 import { PhaseNav, type PhaseView } from "../components/Dashboard/PhaseNav"
+import { WindowDragBar } from "../components/Dashboard/WindowDragBar"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { CandidatePrep } from "../components/Phase2/CandidatePrep"
 import { PracticePanel } from "../components/Phase2/PracticePanel"
 import { StatusCard } from "../components/Phase2/StatusCard"
@@ -28,6 +30,13 @@ const SettingsDialog = lazy(() =>
     default: module.SettingsDialog
   }))
 )
+type WindowMode = "normal" | "stealth"
+type WindowModeResult = {
+  success: boolean
+  mode?: WindowMode
+  error?: string
+}
+const STEALTH_GUIDE_STORAGE_KEY = "atlas_seen_stealth_guide"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +127,8 @@ function AtlasDashboardPage() {
   const [isInitialized, setIsInitialized] = useState(true)
   const [hasApiKey, setHasApiKey] = useState(true)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [windowMode, setWindowModeState] = useState<WindowMode>("normal")
+  const [showStealthGuide, setShowStealthGuide] = useState(false)
   const [credits, setCredits] = useState(999)
   const [toastState, setToastState] = useState({
     open: false,
@@ -132,6 +143,65 @@ function AtlasDashboardPage() {
     },
     []
   )
+
+  const openCommandSearch = useCallback(() => {
+    setIsSettingsOpen(true)
+    showToast("搜索", "已打开设置和模型搜索入口", "neutral")
+  }, [showToast])
+
+  const startDownload = useCallback(async () => {
+    if (!window.electronAPI?.startUpdate) {
+      showToast("下载", "当前环境不支持自动更新下载", "error")
+      return
+    }
+
+    try {
+      showToast("下载", "正在检查并下载可用更新", "neutral")
+      const result = await window.electronAPI.startUpdate()
+      if (!result?.success) {
+        showToast("下载失败", result?.error || "没有可下载的更新，或当前为开发模式", "error")
+      }
+    } catch (error) {
+      showToast("下载失败", error instanceof Error ? error.message : "下载入口暂不可用", "error")
+    }
+  }, [showToast])
+
+  const enterStealthMode = useCallback(async () => {
+    const result = await window.electronAPI?.setWindowMode?.("stealth")
+    if (result?.success) {
+      setWindowModeState("stealth")
+      showToast("Stealth mode", "Shortcut-driven window mode is active.", "neutral")
+    } else if (result?.error) {
+      showToast("Stealth mode", result.error, "error")
+    }
+  }, [showToast])
+
+  const requestStealthMode = useCallback(() => {
+    if (windowMode === "stealth") {
+      void window.electronAPI?.setWindowMode?.("normal").then((result: WindowModeResult | undefined) => {
+        if (result?.success) {
+          setWindowModeState("normal")
+          showToast("Normal mode", "Mouse-first window mode is active.", "neutral")
+        } else if (result?.error) {
+          showToast("Normal mode", result.error, "error")
+        }
+      })
+      return
+    }
+
+    if (localStorage.getItem(STEALTH_GUIDE_STORAGE_KEY) === "true") {
+      void enterStealthMode()
+      return
+    }
+
+    setShowStealthGuide(true)
+  }, [enterStealthMode, showToast, windowMode])
+
+  const confirmStealthGuide = useCallback(() => {
+    localStorage.setItem(STEALTH_GUIDE_STORAGE_KEY, "true")
+    setShowStealthGuide(false)
+    void enterStealthMode()
+  }, [enterStealthMode])
 
   const updateCredits = useCallback(() => {
     setCredits(999)
@@ -197,6 +267,34 @@ function AtlasDashboardPage() {
     }
   }, [updateCredits, updateLanguage, markInitialized, showToast])
 
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined
+
+    void window.electronAPI?.getWindowMode?.().then((result: WindowModeResult | undefined) => {
+      if (result?.mode) setWindowModeState(result.mode)
+    })
+
+    if (window.electronAPI?.onWindowModeChanged) {
+      unsubscribe = window.electronAPI.onWindowModeChanged(setWindowModeState)
+    }
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        openCommandSearch()
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [openCommandSearch])
+
   // Atlas live-assist hotkeys (M3): Ctrl+Shift+A screenshot ask, Ctrl+Shift+V clipboard ask.
   const imageAskRef = useRef(imageAsk)
   imageAskRef.current = imageAsk
@@ -204,6 +302,10 @@ function AtlasDashboardPage() {
     const onScreenshot = () => {
       setActiveTab("ocr")
       void imageAskRef.current.submitImage()
+    }
+    const onRegionScreenshot = () => {
+      setActiveTab("ocr")
+      void imageAskRef.current.submitRegionImage()
     }
     const onClipboardAsk = (event: Event) => {
       const text = (event as CustomEvent<{ text?: string }>).detail?.text
@@ -217,9 +319,11 @@ function AtlasDashboardPage() {
       }
     }
     window.addEventListener("atlas-live-screenshot", onScreenshot)
+    window.addEventListener("atlas-live-region-screenshot", onRegionScreenshot)
     window.addEventListener("atlas-live-ask", onClipboardAsk as EventListener)
     return () => {
       window.removeEventListener("atlas-live-screenshot", onScreenshot)
+      window.removeEventListener("atlas-live-region-screenshot", onRegionScreenshot)
       window.removeEventListener("atlas-live-ask", onClipboardAsk as EventListener)
     }
   }, [])
@@ -250,6 +354,13 @@ function AtlasDashboardPage() {
               ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
             `}</style>
 
+            <WindowDragBar
+              onDownload={startDownload}
+              onSearch={openCommandSearch}
+              onOpenMenu={() => setIsSettingsOpen(true)}
+              onToggleStealth={requestStealthMode}
+              windowMode={windowMode}
+            />
             <DashboardHeader onOpenSettings={() => setIsSettingsOpen(true)} />
 
             <PhaseNav view={view} onChange={setView} backendConnected={blackboard.backendStatus.connected} />
@@ -313,6 +424,7 @@ function AtlasDashboardPage() {
                   ragStatus={blackboard.ragStatus}
                   localAskLoading={imageAsk.loading}
                   onAskImage={imageAsk.submitImage}
+                  onAskRegionImage={imageAsk.submitRegionImage}
                   voiceLanguage={audioAsk.language}
                   onVoiceLanguageChange={audioAsk.setLanguage}
                   voiceRecording={audioAsk.recording}
@@ -366,6 +478,37 @@ function AtlasDashboardPage() {
                 <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
               </Suspense>
             )}
+
+            <Dialog open={showStealthGuide} onOpenChange={setShowStealthGuide}>
+              <DialogContent className="bg-black/92 text-white border border-white/15">
+                <DialogHeader>
+                  <DialogTitle>即将进入隐形模式</DialogTitle>
+                  <DialogDescription>
+                    隐形模式适合面试或屏幕共享场景。进入后窗口会更偏向快捷键控制，并保持当前大小和位置不变。
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="stealth-guide-body">
+                  <p>进入后请优先使用这些快捷键：</p>
+                  <ul>
+                    <li><strong>Ctrl + Shift + A</strong>：截图问答</li>
+                    <li><strong>Ctrl + Shift + S</strong>：区域截图问答</li>
+                    <li><strong>Ctrl + Shift + V</strong>：剪贴板题目问答</li>
+                    <li><strong>Ctrl + B</strong>：显示 / 隐藏窗口</li>
+                    <li><strong>Ctrl + Q</strong>：退出程序</li>
+                    <li><strong>Ctrl + [ / ]</strong>：调整窗口透明度</li>
+                    <li><strong>Ctrl + 方向键</strong>：移动窗口</li>
+                  </ul>
+                </div>
+                <DialogFooter>
+                  <button className="legacy-secondary-button" type="button" onClick={() => setShowStealthGuide(false)}>
+                    取消
+                  </button>
+                  <button className="legacy-primary-button" type="button" onClick={confirmStealthGuide}>
+                    我知道了，进入隐形模式
+                  </button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             <Toast
               open={toastState.open}
