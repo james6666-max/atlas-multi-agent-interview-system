@@ -2309,9 +2309,10 @@ def build_session_report(lang: str = "zh") -> dict:
             "jd_alignment_score": critic.get("jd_alignment_score"),
         })
 
-    jd_value = round(sum(jd_scores) / len(jd_scores) * 100) if jd_scores else _report_unknown(lang)
-    resume_value = round(sum(resume_scores) / len(resume_scores) * 100) if resume_scores else _report_unknown(lang)
-    privacy_value = round(min(privacy_scores) * 100) if privacy_scores else _report_unknown(lang)
+    # Append % only when there is a real number — avoids "未知%" / "unknown%".
+    jd_value = f"{round(sum(jd_scores) / len(jd_scores) * 100)}%" if jd_scores else _report_unknown(lang)
+    resume_value = f"{round(sum(resume_scores) / len(resume_scores) * 100)}%" if resume_scores else _report_unknown(lang)
+    privacy_value = f"{round(min(privacy_scores) * 100)}%" if privacy_scores else _report_unknown(lang)
 
     return {
         "overall_score": overall_score,
@@ -2322,9 +2323,9 @@ def build_session_report(lang: str = "zh") -> dict:
         ),
         "strengths": strengths,
         "weaknesses": weaknesses,
-        "jd_alignment_summary": _report_text(lang, f"平均 JD 匹配度：{jd_value}%", f"Average JD Alignment: {jd_value}%"),
-        "resume_alignment_summary": _report_text(lang, f"平均简历匹配度：{resume_value}%", f"Average Resume Alignment: {resume_value}%"),
-        "privacy_risk_summary": _report_text(lang, f"最低隐私安全分：{privacy_value}%", f"Lowest Privacy Score: {privacy_value}%"),
+        "jd_alignment_summary": _report_text(lang, f"平均 JD 匹配度：{jd_value}", f"Average JD Alignment: {jd_value}"),
+        "resume_alignment_summary": _report_text(lang, f"平均简历匹配度：{resume_value}", f"Average Resume Alignment: {resume_value}"),
+        "privacy_risk_summary": _report_text(lang, f"最低隐私安全分：{privacy_value}", f"Lowest Privacy Score: {privacy_value}"),
         "recommended_practice": recommended_practice,
         "question_reviews": question_reviews,
         "best_question": best.get("question") if best else "",

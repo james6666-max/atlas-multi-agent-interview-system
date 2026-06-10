@@ -1,5 +1,7 @@
 import type { Lang } from "../i18n/translations"
 
+// Fixed phrases: keys are the backend's English strings, values the Chinese ones.
+// Kept in sync with orchestrator_v0.build_session_report and app/coaching/service.py.
 const zhMap: Record<string, string> = {
   "Good alignment with the target JD.": "岗位 JD 贴合度较好。",
   "Answers connect well with resume and project experience.": "回答能结合简历和项目经历。",
@@ -9,6 +11,10 @@ const zhMap: Record<string, string> = {
   "Keep practicing 60-second and 2-minute versions of the Atlas project story.": "继续练习把 Atlas 项目讲成 60 秒和 2 分钟两个版本。",
   "Prepare more concrete examples for FastAPI, Electron, Ollama, and Whisper/OCR in the JD.": "针对 JD 中的 FastAPI、Electron、Ollama、Whisper/OCR 准备更具体的例子。",
   "After each answer, proactively add key trade-offs, fallback plans, and observability details.": "回答后主动补充关键取舍、兜底方案和可观测性设计。",
+  "Practice round completed; more samples will sharpen the strengths/weaknesses picture.": "已完成本轮练习,继续积累样本可以更准地定位强弱项。",
+  "No obvious repeated issue yet; keep improving specificity and structure.": "暂无明显共性问题,可继续提升回答的具体性与结构。",
+  "Practice each answer in 60-second and 2-minute versions, highlighting judgment, actions, and results.": "把每个回答练成 60 秒和 2 分钟两个版本,突出判断、行动和结果。",
+  "No practice record yet. Start a mock interview first.": "尚无练习记录，请先开始一场模拟面试。",
   "unknown": "未知",
   "none": "无明显短板",
 }
@@ -17,24 +23,61 @@ const enMap: Record<string, string> = Object.fromEntries(
   Object.entries(zhMap).map(([en, zh]) => [zh, en])
 )
 
+const valueToZh = (value: string) => (value === "unknown" ? "未知" : value)
+const valueToEn = (value: string) => (value === "未知" ? "unknown" : value)
+
+// Dynamic strings (contain numbers or scores), translatable in both directions.
+interface DynamicPair {
+  en: RegExp
+  zh: RegExp
+  toZh: (m: RegExpMatchArray) => string
+  toEn: (m: RegExpMatchArray) => string
+}
+
+const dynamicPairs: DynamicPair[] = [
+  {
+    en: /^This session recorded (\d+) Q&A turns with an average score of (\d+)\.$/,
+    zh: /^本轮共记录 (\d+) 条问答，平均分 (\d+)。$/,
+    toZh: (m) => `本轮共记录 ${m[1]} 条问答，平均分 ${m[2]}。`,
+    toEn: (m) => `This session recorded ${m[1]} Q&A turns with an average score of ${m[2]}.`,
+  },
+  {
+    en: /^This round covered (\d+) questions with an average score of (\d+)\.$/,
+    zh: /^本场共练习 (\d+) 题,平均分 (\d+)。$/,
+    toZh: (m) => `本场共练习 ${m[1]} 题,平均分 ${m[2]}。`,
+    toEn: (m) => `This round covered ${m[1]} questions with an average score of ${m[2]}.`,
+  },
+  {
+    // value is "85%" or "unknown"/"未知" (older backends emitted a trailing %, hence the optional one)
+    en: /^Average JD Alignment: (.+?)%?$/,
+    zh: /^平均 JD 匹配度：(.+?)%?$/,
+    toZh: (m) => `平均 JD 匹配度：${valueToZh(m[1])}${m[0].endsWith("%") ? "%" : ""}`,
+    toEn: (m) => `Average JD Alignment: ${valueToEn(m[1])}${m[0].endsWith("%") ? "%" : ""}`,
+  },
+  {
+    en: /^Average Resume Alignment: (.+?)%?$/,
+    zh: /^平均简历匹配度：(.+?)%?$/,
+    toZh: (m) => `平均简历匹配度：${valueToZh(m[1])}${m[0].endsWith("%") ? "%" : ""}`,
+    toEn: (m) => `Average Resume Alignment: ${valueToEn(m[1])}${m[0].endsWith("%") ? "%" : ""}`,
+  },
+  {
+    en: /^Lowest Privacy Score: (.+?)%?$/,
+    zh: /^最低隐私安全分：(.+?)%?$/,
+    toZh: (m) => `最低隐私安全分：${valueToZh(m[1])}${m[0].endsWith("%") ? "%" : ""}`,
+    toEn: (m) => `Lowest Privacy Score: ${valueToEn(m[1])}${m[0].endsWith("%") ? "%" : ""}`,
+  },
+]
+
 function localizeText(value: unknown, lang: Lang): unknown {
   if (typeof value !== "string") return value
-  if (lang === "en") return enMap[value] ?? value
 
-  const mapped = zhMap[value]
+  const mapped = lang === "en" ? enMap[value] : zhMap[value]
   if (mapped) return mapped
 
-  let match = value.match(/^This session recorded (\d+) Q&A turns with an average score of (\d+)\.$/)
-  if (match) return `本轮共记录 ${match[1]} 条问答，平均分 ${match[2]}。`
-
-  match = value.match(/^Average JD Alignment: (.+)%$/)
-  if (match) return `平均 JD 匹配度：${match[1]}%`
-
-  match = value.match(/^Average Resume Alignment: (.+)%$/)
-  if (match) return `平均简历匹配度：${match[1]}%`
-
-  match = value.match(/^Lowest Privacy Score: (.+)%$/)
-  if (match) return `最低隐私安全分：${match[1]}%`
+  for (const pair of dynamicPairs) {
+    const match = value.match(lang === "en" ? pair.zh : pair.en)
+    if (match) return lang === "en" ? pair.toEn(match) : pair.toZh(match)
+  }
 
   return value
 }

@@ -99,6 +99,19 @@ def test_english_language_produces_english_questions_and_followups():
     assert nxt["question"].isascii()
 
 
+def test_report_localizes_summary_and_fallbacks_to_english():
+    svc = make_service()
+    svc.start("en2", num_questions=4, language="en")
+    while True:
+        if svc.submit_answer("en2", "I led the Atlas backend with FastAPI and multi-agent orchestration.")["completed"]:
+            break
+    report = svc.report("en2", language="en")
+    assert report["summary"].isascii()
+    # zh remains the default
+    report_zh = svc.report("en2")
+    assert "本场共练习" in report_zh["summary"]
+
+
 def test_submit_without_start_raises():
     svc = make_service()
     try:

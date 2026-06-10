@@ -231,6 +231,11 @@ class CoachingService:
 
 
 def build_practice_report(session_id: str, turns: List[PracticeTurn], config: Dict[str, Any]) -> Dict[str, Any]:
+    language = config.get("language") if config.get("language") in {"zh", "en"} else "zh"
+
+    def _text(zh: str, en: str) -> str:
+        return zh if language == "zh" else en
+
     scores = [turn.score for turn in turns]
     overall = int(round(sum(scores) / len(scores))) if scores else 0
 
@@ -251,25 +256,46 @@ def build_practice_report(session_id: str, turns: List[PracticeTurn], config: Di
     best = max(turns, key=lambda t: t.score)
     worst = min(turns, key=lambda t: t.score)
     if best.score >= 80:
-        strengths.append(f"「{_short(best.question.question)}」回答较好({best.score} 分)。")
+        strengths.append(_text(
+            f"「{_short(best.question.question)}」回答较好({best.score} 分)。",
+            f"Strong answer on \"{_short(best.question.question)}\" ({best.score} pts).",
+        ))
     high_types = [t for t, b in by_type.items() if b["avg_score"] >= 80]
     if high_types:
-        strengths.append("以下题型表现稳定:" + "、".join(high_types) + "。")
+        strengths.append(_text(
+            "以下题型表现稳定:" + "、".join(high_types) + "。",
+            "Consistently strong question types: " + ", ".join(high_types) + ".",
+        ))
     if not strengths:
-        strengths.append("已完成本轮练习,继续积累样本可以更准地定位强弱项。")
+        strengths.append(_text(
+            "已完成本轮练习,继续积累样本可以更准地定位强弱项。",
+            "Practice round completed; more samples will sharpen the strengths/weaknesses picture.",
+        ))
 
-    weaknesses = list(dict.fromkeys(all_issues))[:5] or ["暂无明显共性问题,可继续提升回答的具体性与结构。"]
+    weaknesses = list(dict.fromkeys(all_issues))[:5] or [_text(
+        "暂无明显共性问题,可继续提升回答的具体性与结构。",
+        "No obvious repeated issue yet; keep improving specificity and structure.",
+    )]
 
     recommended = list(dict.fromkeys(all_suggestions))[:5]
     if worst.score < 75:
-        recommended.insert(0, f"重点重练:「{_short(worst.question.question)}」({worst.score} 分)。")
+        recommended.insert(0, _text(
+            f"重点重练:「{_short(worst.question.question)}」({worst.score} 分)。",
+            f"Re-practice first: \"{_short(worst.question.question)}\" ({worst.score} pts).",
+        ))
     if not recommended:
-        recommended = ["把每个回答练成 60 秒和 2 分钟两个版本,突出判断、行动和结果。"]
+        recommended = [_text(
+            "把每个回答练成 60 秒和 2 分钟两个版本,突出判断、行动和结果。",
+            "Practice each answer in 60-second and 2-minute versions, highlighting judgment, actions, and results.",
+        )]
 
     return {
         "session_id": session_id,
         "overall_score": overall,
-        "summary": f"本场共练习 {len(turns)} 题,平均分 {overall}。",
+        "summary": _text(
+            f"本场共练习 {len(turns)} 题,平均分 {overall}。",
+            f"This round covered {len(turns)} questions with an average score of {overall}.",
+        ),
         "strengths": strengths,
         "weaknesses": weaknesses,
         "by_type": by_type,
