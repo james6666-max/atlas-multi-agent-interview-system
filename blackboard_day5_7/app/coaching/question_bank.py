@@ -39,6 +39,32 @@ TECH_TOPICS: Dict[str, str] = {
     "分布式": "分布式系统",
 }
 
+# English display names for the same topic keys (used when language == en).
+TECH_TOPICS_EN: Dict[str, str] = {
+    "fastapi": "FastAPI backend",
+    "react": "React frontend",
+    "electron": "Electron desktop apps",
+    "typescript": "TypeScript",
+    "python": "Python engineering",
+    "ollama": "local LLMs (Ollama)",
+    "llm": "LLM applications",
+    "whisper": "speech recognition (Whisper)",
+    "ocr": "OCR",
+    "rag": "RAG retrieval",
+    "agent": "multi-agent architecture",
+    "blackboard": "blackboard / event bus",
+    "orchestrator": "orchestration",
+    "docker": "Docker deployment",
+    "redis": "Redis caching",
+    "postgres": "database design",
+    "sql": "database design",
+    "kafka": "message queues",
+    "microservice": "microservice architecture",
+    "微服务": "microservice architecture",
+    "并发": "high concurrency",
+    "分布式": "distributed systems",
+}
+
 BEHAVIORAL_BANK: List[str] = [
     "请做个自我介绍,重点讲和这个岗位最相关的经历。",
     "讲一个你最有成就感的项目,你具体负责了什么?",
@@ -143,11 +169,12 @@ def _is_english(language: str | None) -> bool:
     return str(language or "").strip().lower() in {"en", "english"}
 
 
-def detect_topics(resume: str, jd: str, knowledge: str = "") -> List[str]:
+def detect_topics(resume: str, jd: str, knowledge: str = "", language: str = "zh") -> List[str]:
     """Return ordered, de-duplicated display topics found in resume/JD/knowledge."""
     haystack = f"{resume}\n{jd}\n{knowledge}".lower()
+    display_map = TECH_TOPICS_EN if _is_english(language) else TECH_TOPICS
     topics: List[str] = []
-    for key, display in TECH_TOPICS.items():
+    for key, display in display_map.items():
         if key in haystack and display not in topics:
             topics.append(display)
     return topics
@@ -167,7 +194,10 @@ def _q(index: int, qtype: str, question: str, topic: str = "", is_followup: bool
 def build_plan(resume: str, jd: str, knowledge: str = "", num_questions: int = 5, language: str = "zh") -> List[Dict]:
     """Deterministic plan: self-intro + resume deep-dive + technical + system design + behavioral."""
     num_questions = max(3, min(8, int(num_questions or 5)))
-    topics = detect_topics(resume, jd, knowledge)
+    topics = detect_topics(resume, jd, knowledge, language)
+    # Resume deep-dive questions claim "in your resume ..." — they must only
+    # use topics that actually appear in the resume, not in the JD/knowledge.
+    resume_topics = detect_topics(resume, "", "", language)
     has_resume = bool(resume.strip())
     en = _is_english(language)
 
@@ -201,9 +231,10 @@ def build_plan(resume: str, jd: str, knowledge: str = "", num_questions: int = 5
     # 1) self introduction (always first)
     slots.append({"type": "behavioral", "question": behavioral[0], "topic": ""})
 
-    # 2) resume deep-dive on the first detected topic (or generic project question)
+    # 2) resume deep-dive on the first topic found in the resume itself
+    #    (or a generic project question when the resume has no known tech topic)
     if has_resume:
-        topic = topics[0] if topics else ""
+        topic = resume_topics[0] if resume_topics else ""
         if topic:
             slots.append({"type": "resume_followup", "topic": topic, "question": resume_q(topic)})
         else:

@@ -872,8 +872,14 @@ def build_interview_prompt(
     )
 
 
-def reinforce_resume_context_signals(answer: str, question: str, question_type: str, resume_meta: dict) -> str:
+def reinforce_resume_context_signals(answer: str, question: str, question_type: str, resume_meta: dict, resume_context: str = "") -> str:
     if not resume_meta.get("resume_context_loaded"):
+        return answer
+
+    # Only ground answers in the Atlas stack when the resume is actually about
+    # Atlas — otherwise this would inject FastAPI/backend content that has
+    # nothing to do with the candidate's real background.
+    if "atlas" not in (resume_context or "").lower():
         return answer
 
     q = question.lower()
@@ -1103,7 +1109,7 @@ def generate_llm_answer(question: str, question_type: str, agent: str):
             rag_snippets=rag_meta.get("snippets", [])
         )
         answer, llm_meta = get_llm_router().generate(prompt)
-        answer = reinforce_resume_context_signals(answer, question, question_type, resume_meta)
+        answer = reinforce_resume_context_signals(answer, question, question_type, resume_meta, resume_context)
         return answer, {
             "answer_source": llm_meta.get("provider", "llm"),
             "model": llm_meta.get("model"),
@@ -2329,19 +2335,28 @@ def build_session_report(lang: str = "zh") -> dict:
         strengths.append(_report_text(lang, "已完成多轮问答记录，可继续积累样本。", "Multiple interview turns were recorded; keep collecting samples for better review."))
 
     weaknesses = common_notes or [_report_text(lang, "暂无明显共性问题。", "No obvious repeated issue yet.")]
-    recommended_practice = (
-        [
-            "继续练习把 Atlas 项目讲成 60 秒和 2 分钟两个版本。",
-            "针对 JD 中的 FastAPI、Electron、Ollama、Whisper/OCR 准备更具体的例子。",
-            "回答后主动补充关键取舍、兜底方案和可观测性设计。",
-        ]
-        if lang == "zh"
-        else [
-            "Keep practicing 60-second and 2-minute versions of the Atlas project story.",
-            "Prepare more concrete examples for FastAPI, Electron, Ollama, and Whisper/OCR in the JD.",
-            "After each answer, proactively add key trade-offs, fallback plans, and observability details.",
-        ]
-    )
+
+    # Recommend practice based on what the candidate's resume/JD actually
+    # mention — not a hardcoded stack.
+    from app.coaching.question_bank import detect_topics
+
+    profile_resume, _ = load_resume_context()
+    profile_jd, _ = load_jd_context()
+    profile_topics = detect_topics(profile_resume or "", profile_jd or "", "", lang)[:4]
+    if lang == "zh":
+        recommended_practice = ["继续练习把核心项目经历讲成 60 秒和 2 分钟两个版本。"]
+        if profile_topics:
+            recommended_practice.append("针对简历/JD 中的 " + "、".join(profile_topics) + " 准备更具体的例子。")
+        else:
+            recommended_practice.append("结合目标岗位的核心要求，为每类常见问题准备一个具体例子。")
+        recommended_practice.append("回答后主动补充关键取舍和可量化的结果。")
+    else:
+        recommended_practice = ["Keep practicing 60-second and 2-minute versions of your core project story."]
+        if profile_topics:
+            recommended_practice.append("Prepare more concrete examples for " + ", ".join(profile_topics) + " from your resume/JD.")
+        else:
+            recommended_practice.append("Prepare one concrete example per common question type, matched to the role's key requirements.")
+        recommended_practice.append("After each answer, proactively add key trade-offs and quantifiable results.")
 
     question_reviews = []
     for item in history[-10:]:
