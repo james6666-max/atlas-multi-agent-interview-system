@@ -71,6 +71,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "answer.total": "总耗时",
     "answer.type": "类型",
     "answer.agent": "Agent",
+    "answer.fallbackNotice": "未配置可用 AI 模型，当前为离线模板回答。请在「设置」中配置云端 API Key，或启动本地 Ollama。",
 
     "critic.eyebrow": "评审",
     "critic.title": "审核闸门",
@@ -292,6 +293,7 @@ export const translations: Record<Lang, Record<string, string>> = {
     "answer.total": "Total",
     "answer.type": "Type",
     "answer.agent": "Agent",
+    "answer.fallbackNotice": "No AI model is configured — this is an offline template answer. Set a cloud API key in Settings, or start local Ollama.",
 
     "critic.eyebrow": "Critic",
     "critic.title": "Review gate",

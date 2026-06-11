@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react"
 import { formatAskResult } from "../utils/formatAskResult"
+import { useI18n } from "../i18n/LanguageProvider"
 
 type VoiceLanguage = "Unknown" | "Chinese" | "English"
 
@@ -15,6 +16,7 @@ function getPreferredAudioMimeType() {
 }
 
 export function useAudioAsk(onCompleted?: () => void) {
+  const { lang } = useI18n()
   const [recording, setRecording] = useState(false)
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null)
   const [chunks, setChunks] = useState<BlobPart[]>([])
@@ -122,7 +124,7 @@ export function useAudioAsk(onCompleted?: () => void) {
         return
       }
 
-      setResult(formatAskResult(json))
+      setResult(formatAskResult(json, lang))
       onCompleted?.()
     } catch (error: any) {
       console.error("Send audio to Whisper failed:", error)
@@ -135,7 +137,7 @@ export function useAudioAsk(onCompleted?: () => void) {
     } finally {
       setSendLoading(false)
     }
-  }, [chunks, language, mimeType, onCompleted])
+  }, [chunks, language, lang, mimeType, onCompleted])
 
   const clearAudio = useCallback(() => {
     setChunks([])

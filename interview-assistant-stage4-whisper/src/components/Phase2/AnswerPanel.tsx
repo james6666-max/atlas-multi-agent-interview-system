@@ -32,6 +32,7 @@ export function AnswerPanel({
   const answer = typeof response?.answer === "string" ? response.answer : ""
   const tone = getAgentTone(response)
   const provider = (response?.llm?.provider as string) || ""
+  const isFallback = Boolean(response?.llm?.fallback) || provider === "stub"
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle")
 
   const copyAnswer = async () => {
@@ -66,6 +67,10 @@ export function AnswerPanel({
           {latencyMs !== null && <span className="phase2-badge">{t("answer.total")} {latencyMs}ms</span>}
         </div>
       </div>
+
+      {isFallback && answer && !streaming && (
+        <div className="phase2-fallback-notice">{t("answer.fallbackNotice")}</div>
+      )}
 
       <div className="phase2-answer-body">
         {answer ? (

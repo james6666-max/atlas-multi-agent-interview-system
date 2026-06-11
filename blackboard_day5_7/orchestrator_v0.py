@@ -353,6 +353,10 @@ class AskResponse(BaseModel):
     rag_used: bool = False
     rag_sources: list[str] = []
     session_id: str = ""
+    # Which engine produced the answer ("ollama"/"cloud"/"stub") and whether it
+    # was a fallback — lets the UI warn when no real LLM is configured.
+    answer_source: str = ""
+    llm_fallback: bool = False
 
 
 class LLMConfigUpdate(BaseModel):
@@ -1769,6 +1773,8 @@ def _run_phase1_answer_pipeline_sync(
         "rag_used": bool(rag.get("has_rag")),
         "rag_sources": rag.get("sources", []),
         "rag": rag,
+        "answer_source": str(answer_meta.get("answer_source") or ""),
+        "llm_fallback": bool(answer_meta.get("fallback")),
     }
 
 
@@ -2052,6 +2058,22 @@ def _stream_answer(req: AskRequest):
         rag=rag_payload,
     )
     final_answer = str(critic.get("final_answer") or answer)
+
+    # Persist the turn so the post-interview report (/report/session) reflects
+    # streamed Q&A too — previously only the non-stream /ask path wrote history,
+    # so everything asked through the live UI was missing from the report.
+    try:
+        store.update_current_question(req.question, phase1_type, req.language, req.source)
+        store.append_history(
+            req.question,
+            final_answer,
+            selected_agent,
+            phase1_type,
+            _critic_for_history(critic),
+            req.source,
+        )
+    except Exception as error:
+        print("[ask_stream] failed to persist history:", error)
 
     draft = publish(
         EventType.ANSWER_DRAFT,

@@ -35,7 +35,7 @@ async function postImageFileToAtlas(image: Blob, filename = "screenshot.png", la
 }
 
 export function useImageAsk(onCompleted?: () => void) {
-  const { apiLanguage } = useI18n()
+  const { apiLanguage, lang } = useI18n()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState("")
 
@@ -107,7 +107,7 @@ export function useImageAsk(onCompleted?: () => void) {
           return
         }
 
-        setResult(formatAskResult(response))
+        setResult(formatAskResult(response, lang))
         onCompleted?.()
         return
       }
@@ -134,7 +134,7 @@ export function useImageAsk(onCompleted?: () => void) {
         return
       }
 
-      setResult(formatAskResult(response))
+      setResult(formatAskResult(response, lang))
       onCompleted?.()
     } catch (error: any) {
       console.error("Local ask image failed:", error)
@@ -147,7 +147,7 @@ export function useImageAsk(onCompleted?: () => void) {
     } finally {
       setLoading(false)
     }
-  }, [onCompleted, captureAndUpload, apiLanguage])
+  }, [onCompleted, captureAndUpload, apiLanguage, lang])
 
   const submitRegionImage = useCallback(async () => {
     try {
@@ -173,7 +173,7 @@ export function useImageAsk(onCompleted?: () => void) {
         return
       }
 
-      setResult(formatAskResult(response))
+      setResult(formatAskResult(response, lang))
       onCompleted?.()
     } catch (error: any) {
       console.error("Local ask region image failed:", error)
@@ -186,7 +186,7 @@ export function useImageAsk(onCompleted?: () => void) {
     } finally {
       setLoading(false)
     }
-  }, [onCompleted, captureAndUpload])
+  }, [onCompleted, captureAndUpload, lang])
 
   const clearImage = useCallback(() => setResult(""), [])
 

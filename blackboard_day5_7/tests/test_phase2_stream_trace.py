@@ -42,6 +42,22 @@ def test_ask_stream_technical_emits_meta_delta_final_done():
     assert {"manual_input", "question_detected", "answer_final"} <= trace_types
 
 
+def test_ask_stream_persists_history_for_report():
+    question = "Explain how a bloom filter works and when you would use one."
+    resp = client.post("/ask_stream", json={"question": question})
+    assert resp.status_code == 200
+    events = _sse_events(resp.text)
+    assert any(e["type"] == "final" for e in events)
+
+    # The streamed turn must land in the blackboard history so the
+    # post-interview report reflects what was actually asked in the live UI.
+    history = orchestrator_v0.store.read().get("history", [])
+    assert any(item.get("question") == question for item in history)
+
+    report = client.get("/report/session").json()
+    assert any(r.get("question") == question for r in report["question_reviews"])
+
+
 def test_ask_stream_ignored_has_no_final():
     resp = client.post("/ask_stream", json={"question": "hello, nice weather."})
     assert resp.status_code == 200
