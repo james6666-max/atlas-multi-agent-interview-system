@@ -106,3 +106,27 @@ def test_generate_raises_when_all_fail():
     local = FakeProvider("ollama", True, fail=True)
     with pytest.raises(RuntimeError):
         _router("hybrid", cloud, local).generate("hi")
+
+
+def test_cloud_failure_demotes_cloud_during_cooldown():
+    cloud = FakeProvider("cloud", False, fail=True)
+    local = FakeProvider("ollama", True, text="local answer")
+    router = _router("hybrid", cloud, local)
+    router.generate("first")  # cloud fails -> cooldown starts
+    cloud.seen_prompt = None
+    text, meta = router.generate("second")
+    assert text == "local answer"
+    assert meta["provider"] == "ollama"
+    assert cloud.seen_prompt is None  # local served first; cloud not retried
+
+
+def test_cloud_success_resets_cooldown():
+    import time
+
+    cloud = FakeProvider("cloud", False, text="cloud answer")
+    local = FakeProvider("ollama", True, text="local answer")
+    router = _router("hybrid", cloud, local)
+    router._cloud_down_until = time.time() - 1  # expired cooldown -> cloud first again
+    text, meta = router.generate("hi")
+    assert meta["provider"] == "cloud"
+    assert router._cloud_down_until == 0.0

@@ -15,6 +15,11 @@ from typing import Iterator, Protocol
 
 import requests
 
+# Cap on establishing the connection (TCP + TLS), separate from the read
+# timeout: an unreachable endpoint then fails in seconds and the router can
+# fall back to the next provider, instead of hanging for the full read timeout.
+CONNECT_TIMEOUT = 5.0
+
 
 class LLMProvider(Protocol):
     name: str
@@ -35,24 +40,25 @@ class OllamaProvider:
     def __init__(self, base_url: str, model: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self._session = requests.Session()  # reuse connections across requests
 
     def configured(self) -> bool:
         return bool(self.base_url and self.model)
 
     def generate(self, prompt: str, *, timeout: int = 60) -> str:
-        response = requests.post(
+        response = self._session.post(
             f"{self.base_url}/api/generate",
             json={"model": self.model, "prompt": prompt, "stream": False},
-            timeout=timeout,
+            timeout=(CONNECT_TIMEOUT, timeout),
         )
         response.raise_for_status()
         return str(response.json().get("response", "")).strip()
 
     def stream(self, prompt: str, *, timeout: int = 120) -> Iterator[str]:
-        with requests.post(
+        with self._session.post(
             f"{self.base_url}/api/generate",
             json={"model": self.model, "prompt": prompt, "stream": True},
-            timeout=timeout,
+            timeout=(CONNECT_TIMEOUT, timeout),
             stream=True,
         ) as response:
             response.raise_for_status()
@@ -78,6 +84,7 @@ class OpenAICompatProvider:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self._session = requests.Session()  # reuse connections: skips TCP+TLS handshake per call
 
     def configured(self) -> bool:
         return bool(self.base_url and self.api_key and self.model)
@@ -97,11 +104,11 @@ class OpenAICompatProvider:
         }
 
     def generate(self, prompt: str, *, timeout: int = 60) -> str:
-        response = requests.post(
+        response = self._session.post(
             f"{self.base_url}/chat/completions",
             headers=self._headers(),
             json=self._payload(prompt, stream=False),
-            timeout=timeout,
+            timeout=(CONNECT_TIMEOUT, timeout),
         )
         response.raise_for_status()
         data = response.json()
@@ -111,11 +118,11 @@ class OpenAICompatProvider:
         return str(choices[0].get("message", {}).get("content", "")).strip()
 
     def stream(self, prompt: str, *, timeout: int = 120) -> Iterator[str]:
-        with requests.post(
+        with self._session.post(
             f"{self.base_url}/chat/completions",
             headers=self._headers(),
             json=self._payload(prompt, stream=True),
-            timeout=timeout,
+            timeout=(CONNECT_TIMEOUT, timeout),
             stream=True,
         ) as response:
             response.raise_for_status()

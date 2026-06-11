@@ -107,6 +107,7 @@ _coaching_service = CoachingService(llm_generate=_coaching_llm_generate)
 
 
 _whisper_model = None
+_whisper_lock = threading.Lock()
 _mock_state = {
     "active": False,
     "round_index": 0,
@@ -116,25 +117,30 @@ _mock_state = {
 }
 
 
-def get_whisper_model():
+def get_whisper_model(local_files_only: bool = False):
     global _whisper_model
 
     if _whisper_model is None:
-        try:
-            from faster_whisper import WhisperModel  # lazy: avoid loading ctranslate2 at startup
-        except ImportError as exc:
-            # Lite delivery build ships without the STT stack; degrade gracefully.
-            raise HTTPException(
-                status_code=503,
-                detail="此交付版本未包含语音转写功能,请使用文字 / 截图提问 (Voice STT not bundled in this build).",
-            ) from exc
-        model_name = os.getenv("ATLAS_WHISPER_MODEL", "small")
-        # Set ATLAS_WHISPER_MODEL=tiny for faster local startup on weaker CPUs.
-        _whisper_model = WhisperModel(
-            model_name,
-            device="cpu",
-            compute_type="int8"
-        )
+        with _whisper_lock:  # pre-warm thread and first request may race here
+            if _whisper_model is None:
+                try:
+                    from faster_whisper import WhisperModel  # lazy: avoid loading ctranslate2 at startup
+                except ImportError as exc:
+                    # Lite delivery build ships without the STT stack; degrade gracefully.
+                    raise HTTPException(
+                        status_code=503,
+                        detail="此交付版本未包含语音转写功能,请使用文字 / 截图提问 (Voice STT not bundled in this build).",
+                    ) from exc
+                model_name = os.getenv("ATLAS_WHISPER_MODEL", "small")
+                # Set ATLAS_WHISPER_MODEL=tiny for faster local startup on weaker CPUs.
+                # local_files_only=True is used by the pre-warm path: load only when
+                # the model is already in the local cache, never trigger a download.
+                _whisper_model = WhisperModel(
+                    model_name,
+                    device="cpu",
+                    compute_type="int8",
+                    local_files_only=local_files_only,
+                )
 
     return _whisper_model
 
@@ -201,6 +207,27 @@ def _prewarm_ocr_in_background() -> None:
             print(f"[startup] OCR pre-warm skipped: {exc}")
 
     threading.Thread(target=_load, name="ocr-prewarm", daemon=True).start()
+
+
+@app.on_event("startup")
+def _prewarm_whisper_in_background() -> None:
+    """Load the Whisper STT model shortly after boot so the first voice ask
+    doesn't pay the multi-second model load. Only warms a model that is
+    already in the local cache (local_files_only=True) — the ~460MB first-time
+    download is never triggered at startup. No-op when the STT stack isn't
+    bundled (lite build). Disable with ATLAS_PREWARM_WHISPER=0."""
+    if os.getenv("ATLAS_PREWARM_WHISPER", "1").lower() in {"0", "false"}:
+        return
+
+    def _load() -> None:
+        time.sleep(8)  # stagger after boot and the OCR pre-warm to avoid CPU contention
+        try:
+            get_whisper_model(local_files_only=True)
+            print("[startup] Whisper model pre-warmed")
+        except Exception as exc:  # model not cached yet / STT not bundled
+            print(f"[startup] Whisper pre-warm skipped: {exc}")
+
+    threading.Thread(target=_load, name="whisper-prewarm", daemon=True).start()
 
 
 def extract_text_from_image(image_path: str) -> str:
