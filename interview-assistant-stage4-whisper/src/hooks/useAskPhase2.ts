@@ -119,12 +119,11 @@ export function useAskPhase2() {
 
       const sessionId = final?.session_id
       if (sessionId) {
-        try {
-          const traceResponse = await getTrace(sessionId)
-          setTrace(traceResponse.steps ?? [])
-        } catch (traceErr) {
-          console.warn("Trace fetch failed:", traceErr)
-        }
+        // Fire-and-forget: the agent-trace panel can arrive late; the answer
+        // itself must not wait on this extra round trip.
+        void getTrace(sessionId)
+          .then((traceResponse) => setTrace(traceResponse.steps ?? []))
+          .catch((traceErr) => console.warn("Trace fetch failed:", traceErr))
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return

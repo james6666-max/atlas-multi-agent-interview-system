@@ -2,11 +2,47 @@ import { useCallback, useState } from "react"
 import { formatAskResult } from "../utils/formatAskResult"
 import { useI18n } from "../i18n/LanguageProvider"
 
+// OCR detection runs (and uploads) much faster on a bounded image, and the
+// model rescales internally anyway — text recognition is unaffected at this
+// size. Images already within the cap are passed through untouched.
+const OCR_MAX_DIMENSION = 2000
+
 async function dataUrlToFile(dataUrl: string, filename: string) {
   const response = await fetch(dataUrl)
   const blob = await response.blob()
   const type = blob.type || "image/png"
   return new File([blob], filename, { type })
+}
+
+async function downscaleForOcr(file: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const longest = Math.max(bitmap.width, bitmap.height)
+    if (longest <= OCR_MAX_DIMENSION) {
+      bitmap.close()
+      return file
+    }
+    const scale = OCR_MAX_DIMENSION / longest
+    const canvas = document.createElement("canvas")
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      bitmap.close()
+      return file
+    }
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.92)
+    )
+    if (!blob) return file
+    const name = file.name.replace(/\.[^.]+$/, "") + ".jpg"
+    return new File([blob], name, { type: "image/jpeg" })
+  } catch {
+    // Any decode/canvas failure: fall back to the original image.
+    return file
+  }
 }
 
 async function postImageFileToAtlas(image: Blob, filename = "screenshot.png", language = "Unknown") {
@@ -52,7 +88,8 @@ export function useImageAsk(onCompleted?: () => void) {
         finished = true
         try {
           setResult("Uploading screenshot to OCR...")
-          const imageFile = await dataUrlToFile(data.preview, filename)
+          const rawFile = await dataUrlToFile(data.preview, filename)
+          const imageFile = await downscaleForOcr(rawFile)
           const json = await postImageFileToAtlas(imageFile, imageFile.name, apiLanguage)
           if (typeof unsubscribe === "function") unsubscribe()
           resolve(json)
@@ -128,7 +165,8 @@ export function useImageAsk(onCompleted?: () => void) {
       }
 
       setResult("Uploading image...")
-      const response = await postImageFileToAtlas(file, file.name, apiLanguage)
+      const scaledFile = await downscaleForOcr(file)
+      const response = await postImageFileToAtlas(scaledFile, scaledFile.name, apiLanguage)
       if (response?.detail) {
         setResult(`Request failed: ${response.detail}`)
         return
