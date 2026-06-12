@@ -21,8 +21,8 @@ export function useBackendStatus(): BackendStatusState {
   const [error, setError] = useState<string | null>(null)
   const [raw, setRaw] = useState<BackendStatusResponse | null>(null)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const status = await getBackendConfigStatus()
       setRaw(status)
@@ -33,13 +33,23 @@ export function useBackendStatus(): BackendStatusState {
       setOnline(false)
       setError(err instanceof Error ? err.message : "Backend offline")
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // The packaged backend sidecar takes a few seconds to boot, often after the
+  // UI has mounted. Retry silently until it comes online, then stop polling.
+  useEffect(() => {
+    if (online) return
+    const id = window.setInterval(() => {
+      void refresh(true)
+    }, 2000)
+    return () => window.clearInterval(id)
+  }, [online, refresh])
 
   return {
     online,

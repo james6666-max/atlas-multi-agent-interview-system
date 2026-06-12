@@ -11,6 +11,7 @@ Both expose blocking `generate()` and streaming `stream()` returning text deltas
 """
 
 import json
+import os
 from typing import Iterator, Protocol
 
 import requests
@@ -19,6 +20,19 @@ import requests
 # timeout: an unreachable endpoint then fails in seconds and the router can
 # fall back to the next provider, instead of hanging for the full read timeout.
 CONNECT_TIMEOUT = 5.0
+
+# Keep the Ollama model loaded between requests; the default unload after
+# 5 idle minutes makes the next question pay a multi-second model reload.
+OLLAMA_KEEP_ALIVE = "30m"
+
+
+def _max_output_tokens() -> int:
+    """Cap generation length so total latency and cloud cost stay bounded.
+    Interview answers fit comfortably; override with ATLAS_LLM_MAX_TOKENS."""
+    try:
+        return max(1, int(os.getenv("ATLAS_LLM_MAX_TOKENS", "2048")))
+    except ValueError:
+        return 2048
 
 
 class LLMProvider(Protocol):
@@ -45,10 +59,19 @@ class OllamaProvider:
     def configured(self) -> bool:
         return bool(self.base_url and self.model)
 
+    def _payload(self, prompt: str, stream: bool) -> dict:
+        return {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": stream,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
+            "options": {"num_predict": _max_output_tokens()},
+        }
+
     def generate(self, prompt: str, *, timeout: int = 60) -> str:
         response = self._session.post(
             f"{self.base_url}/api/generate",
-            json={"model": self.model, "prompt": prompt, "stream": False},
+            json=self._payload(prompt, stream=False),
             timeout=(CONNECT_TIMEOUT, timeout),
         )
         response.raise_for_status()
@@ -57,7 +80,7 @@ class OllamaProvider:
     def stream(self, prompt: str, *, timeout: int = 120) -> Iterator[str]:
         with self._session.post(
             f"{self.base_url}/api/generate",
-            json={"model": self.model, "prompt": prompt, "stream": True},
+            json=self._payload(prompt, stream=True),
             timeout=(CONNECT_TIMEOUT, timeout),
             stream=True,
         ) as response:
@@ -101,6 +124,7 @@ class OpenAICompatProvider:
             "messages": [{"role": "user", "content": prompt}],
             "stream": stream,
             "temperature": 0.4,
+            "max_tokens": _max_output_tokens(),
         }
 
     def generate(self, prompt: str, *, timeout: int = 60) -> str:

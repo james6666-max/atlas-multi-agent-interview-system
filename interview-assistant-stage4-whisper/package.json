@@ -23,14 +23,16 @@
       "dist/**/*",
       "dist-electron/**/*",
       "package.json",
-      "electron/**/*"
+      "electron/**/*",
+      "!node_modules/**"
     ],
     "extraResources": [
       {
         "from": "../blackboard_day5_7/dist/atlas-backend",
         "to": "backend",
         "filter": [
-          "**/*"
+          "**/*",
+          "!atlas_data/**"
         ]
       }
     ],

@@ -15,14 +15,16 @@ export function useAskPhase2() {
   const [trace, setTrace] = useState<TraceStep[] | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
-  // Batches streaming deltas into one render per animation frame instead of
-  // one render per token, which keeps long answers smooth.
-  const flushFrameRef = useRef<number | null>(null)
+  // Batches streaming deltas into one render per ~50ms instead of one render
+  // per token. Uses setTimeout rather than requestAnimationFrame on purpose:
+  // rAF is suspended by Chromium when the window is occluded or hidden (the
+  // stealth overlay), which froze the answer at "no answer yet" mid-stream.
+  const flushTimerRef = useRef<number | null>(null)
 
   const cancelPendingFlush = () => {
-    if (flushFrameRef.current !== null) {
-      cancelAnimationFrame(flushFrameRef.current)
-      flushFrameRef.current = null
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current)
+      flushTimerRef.current = null
     }
   }
 
@@ -57,11 +59,11 @@ export function useAskPhase2() {
     }
 
     const scheduleFlush = () => {
-      if (flushFrameRef.current !== null) return
-      flushFrameRef.current = requestAnimationFrame(() => {
-        flushFrameRef.current = null
+      if (flushTimerRef.current !== null) return
+      flushTimerRef.current = window.setTimeout(() => {
+        flushTimerRef.current = null
         mergePartial()
-      })
+      }, 50)
     }
 
     try {

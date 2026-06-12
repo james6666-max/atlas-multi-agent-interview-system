@@ -26,6 +26,7 @@ interface InputWorkspacePageProps {
   knowledgeStatus: any
   ragStatus: any
   localAskLoading: boolean
+  ocrResult: string
   onAskImage: () => void
   onAskRegionImage: () => void
   voiceLanguage: "Unknown" | "Chinese" | "English"
@@ -83,6 +84,7 @@ export default function InputWorkspacePage({
   knowledgeStatus,
   ragStatus,
   localAskLoading,
+  ocrResult,
   onAskImage,
   onAskRegionImage,
   voiceLanguage,
@@ -138,14 +140,17 @@ export default function InputWorkspacePage({
       </div>
 
       {activeTab === "ocr" && (
-        <div className="legacy-button-row">
-          <button className="legacy-primary-button" onClick={onAskImage} disabled={localAskLoading}>
-            {localAskLoading ? t("common.processing") : t("ocr.capture")}
-          </button>
-          <button className="legacy-secondary-button" onClick={onAskRegionImage} disabled={localAskLoading}>
-            区域截图
-          </button>
-        </div>
+        <>
+          <div className="legacy-button-row">
+            <button className="legacy-primary-button" onClick={onAskImage} disabled={localAskLoading}>
+              {localAskLoading ? t("common.processing") : t("ocr.capture")}
+            </button>
+            <button className="legacy-secondary-button" onClick={onAskRegionImage} disabled={localAskLoading}>
+              区域截图
+            </button>
+          </div>
+          {ocrResult && <pre className="legacy-result-box">{ocrResult}</pre>}
+        </>
       )}
 
       {activeTab === "voice" && (
@@ -181,7 +186,7 @@ export default function InputWorkspacePage({
 
       {activeTab === "manual" && <Phase2ManualDemoPage onCompleted={onCompleted} />}
 
-      {voiceResult && (
+      {activeTab === "voice" && voiceResult && (
         <pre className="legacy-result-box">{voiceResult}</pre>
       )}
     </section>
