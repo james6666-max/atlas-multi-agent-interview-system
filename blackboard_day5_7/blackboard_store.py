@@ -60,7 +60,11 @@ class BlackboardStore:
         data["updated_at"] = int(time.time())
         self._trim(data)
         self.validate(data)
-        self.data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Compact separators: roughly halves the serialized size (and the
+        # per-request write time) versus indent=2 for a 300-item history.
+        self.data_path.write_text(
+            json.dumps(data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
         self._validated_stat = self._stat_signature()
         self._cached_version = data["version"]
         return data

@@ -44,8 +44,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Seed writable data dir with bundled defaults on first launch (no-op in dev).
+# blackboard_instance.json is deliberately NOT seeded from the bundle: the
+# bundled file is a snapshot of the dev machine's session and used to ship
+# demo turns into fresh installs' review page. A clean instance is created
+# programmatically below instead.
 ensure_seed_files([
-    "blackboard_instance.json",
     "blackboard_schema.json",
     "resume.txt",
     "jd.txt",
@@ -55,6 +58,46 @@ store = BlackboardStore(
     data_path=str(data_dir() / "blackboard_instance.json"),
     schema_path=str(resource_dir() / "blackboard_schema.json"),
 )
+
+
+def _ensure_blackboard_initialized() -> None:
+    """Create a clean, schema-valid blackboard on first launch (or in dev
+    after the instance file is deleted) instead of shipping dev history."""
+    path = Path(store.data_path)
+    if path.exists():
+        return
+    now = int(time.time())
+    initial = {
+        "session_id": "default-session",
+        "version": 1,
+        "updated_at": now,
+        "mode": "practice",
+        "current_question": {
+            "text": "",
+            "type": "Unknown",
+            "language": "Unknown",
+            "timestamp": now,
+            "source": "manual_input",
+            "confidence": 0,
+        },
+        "history": [],
+        "rolling_context": {"recent_transcript": [], "summary": "", "open_threads": []},
+        "resume_context": {
+            "candidate_name": "",
+            "skills": [],
+            "projects": [],
+            "strengths": [],
+            "weaknesses": [],
+            "star_stories": [],
+        },
+        "company_context": {},
+        "agent_state": {},
+    }
+    store.validate(initial)
+    path.write_text(json.dumps(initial, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
+_ensure_blackboard_initialized()
 phase2_bus, phase2_orchestrator = create_phase2_runtime()
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
@@ -107,6 +150,7 @@ _coaching_service = CoachingService(llm_generate=_coaching_llm_generate)
 
 
 _whisper_model = None
+_whisper_lock = threading.Lock()
 _mock_state = {
     "active": False,
     "round_index": 0,
@@ -116,27 +160,45 @@ _mock_state = {
 }
 
 
-def get_whisper_model():
+def get_whisper_model(local_files_only: bool = False):
     global _whisper_model
 
     if _whisper_model is None:
-        try:
-            from faster_whisper import WhisperModel  # lazy: avoid loading ctranslate2 at startup
-        except ImportError as exc:
-            # Lite delivery build ships without the STT stack; degrade gracefully.
-            raise HTTPException(
-                status_code=503,
-                detail="此交付版本未包含语音转写功能,请使用文字 / 截图提问 (Voice STT not bundled in this build).",
-            ) from exc
-        model_name = os.getenv("ATLAS_WHISPER_MODEL", "small")
-        # Set ATLAS_WHISPER_MODEL=tiny for faster local startup on weaker CPUs.
-        _whisper_model = WhisperModel(
-            model_name,
-            device="cpu",
-            compute_type="int8"
-        )
+        with _whisper_lock:  # pre-warm thread and first request may race here
+            if _whisper_model is None:
+                try:
+                    from faster_whisper import WhisperModel  # lazy: avoid loading ctranslate2 at startup
+                except ImportError as exc:
+                    # Lite delivery build ships without the STT stack; degrade gracefully.
+                    raise HTTPException(
+                        status_code=503,
+                        detail="此交付版本未包含语音转写功能,请使用文字 / 截图提问 (Voice STT not bundled in this build).",
+                    ) from exc
+                model_name = os.getenv("ATLAS_WHISPER_MODEL", "small")
+                # Set ATLAS_WHISPER_MODEL=tiny for faster local startup on weaker CPUs.
+                # local_files_only=True is used by the pre-warm path: load only when
+                # the model is already in the local cache, never trigger a download.
+                _whisper_model = WhisperModel(
+                    model_name,
+                    device="cpu",
+                    compute_type="int8",
+                    local_files_only=local_files_only,
+                )
 
     return _whisper_model
+
+
+def _looks_like_stt_hallucination(text: str) -> bool:
+    """Detect Whisper's repetition-loop hallucinations on silence/noise,
+    e.g. "わいわいわいわい…" — a tiny character set or a short unit repeated
+    to fill the transcript. Real questions never look like this."""
+    compact = re.sub(r"\s+", "", text or "")
+    if len(compact) >= 12 and len(set(compact)) <= 3:
+        return True
+    match = re.match(r"^(.{1,6}?)\1{3,}", compact)
+    if match and len(match.group(0)) >= len(compact) * 0.8:
+        return True
+    return False
 
 
 def transcribe_audio_file(audio_path: str, language: str = "auto") -> str:
@@ -148,23 +210,48 @@ def transcribe_audio_file(audio_path: str, language: str = "auto") -> str:
     elif language == "English":
         whisper_language = "en"
 
+    # Greedy decoding (beam_size=1) is 3-5x faster than beam 5 on CPU with
+    # near-identical accuracy on short interview questions; the VAD filter and
+    # domain initial_prompt carry the recognition quality. (best_of dropped:
+    # it only applies to sampling and is inert at temperature=0.)
+    try:
+        beam_size = max(1, int(os.getenv("ATLAS_WHISPER_BEAM", "1")))
+    except ValueError:
+        beam_size = 1
     segments, info = model.transcribe(
     audio_path,
     language=whisper_language,
     vad_filter=True,
-    beam_size=5,
-    best_of=5,
+    beam_size=beam_size,
     temperature=0,
+    # Feeding the previous window back in is the main driver of Whisper's
+    # repetition-loop hallucinations on noisy/silent audio; questions here
+    # are short, so cross-window context adds nothing.
+    condition_on_previous_text=False,
     initial_prompt="这是一段中文或英文的面试问题语音，请准确转写技术面试、系统设计、算法、行为面试相关内容。常见词包括：系统设计、短链接、限流器、API、算法、二分查找、面向对象、多态、缓存、数据库、队列、并发。"
 )
-    
+
 
     texts = []
     for segment in segments:
         if segment.text and segment.text.strip():
             texts.append(segment.text.strip())
 
-    return " ".join(texts).strip()
+    text = " ".join(texts).strip()
+
+    # The product only supports zh/en questions; when auto-detecting, any
+    # other detected language is almost always a hallucination on noise.
+    if whisper_language is None:
+        detected = str(getattr(info, "language", "") or "")
+        if detected and detected not in ("zh", "en"):
+            print(f"[stt] dropped transcript: detected unsupported language '{detected}'")
+            return ""
+
+    if _looks_like_stt_hallucination(text):
+        print("[stt] dropped transcript: repetition-loop hallucination detected")
+        return ""
+
+    return text
 
 
 
@@ -201,6 +288,27 @@ def _prewarm_ocr_in_background() -> None:
             print(f"[startup] OCR pre-warm skipped: {exc}")
 
     threading.Thread(target=_load, name="ocr-prewarm", daemon=True).start()
+
+
+@app.on_event("startup")
+def _prewarm_whisper_in_background() -> None:
+    """Load the Whisper STT model shortly after boot so the first voice ask
+    doesn't pay the multi-second model load. Only warms a model that is
+    already in the local cache (local_files_only=True) — the ~460MB first-time
+    download is never triggered at startup. No-op when the STT stack isn't
+    bundled (lite build). Disable with ATLAS_PREWARM_WHISPER=0."""
+    if os.getenv("ATLAS_PREWARM_WHISPER", "1").lower() in {"0", "false"}:
+        return
+
+    def _load() -> None:
+        time.sleep(8)  # stagger after boot and the OCR pre-warm to avoid CPU contention
+        try:
+            get_whisper_model(local_files_only=True)
+            print("[startup] Whisper model pre-warmed")
+        except Exception as exc:  # model not cached yet / STT not bundled
+            print(f"[startup] Whisper pre-warm skipped: {exc}")
+
+    threading.Thread(target=_load, name="whisper-prewarm", daemon=True).start()
 
 
 def extract_text_from_image(image_path: str) -> str:
@@ -2255,7 +2363,7 @@ async def ask_audio(
         if not text.strip():
             raise HTTPException(
                 status_code=400,
-                detail="Whisper did not extract any speech text from the audio."
+                detail="未识别到有效的提问语音，请靠近麦克风、在安静环境下重试 (No clear question detected in the audio. Please try again closer to the microphone).",
             )
 
         ask_req = AskRequest(

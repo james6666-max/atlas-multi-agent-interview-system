@@ -15,6 +15,18 @@ export function useAskPhase2() {
   const [trace, setTrace] = useState<TraceStep[] | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
+  // Batches streaming deltas into one render per ~50ms instead of one render
+  // per token. Uses setTimeout rather than requestAnimationFrame on purpose:
+  // rAF is suspended by Chromium when the window is occluded or hidden (the
+  // stealth overlay), which froze the answer at "no answer yet" mid-stream.
+  const flushTimerRef = useRef<number | null>(null)
+
+  const cancelPendingFlush = () => {
+    if (flushTimerRef.current !== null) {
+      window.clearTimeout(flushTimerRef.current)
+      flushTimerRef.current = null
+    }
+  }
 
   const submit = async (override?: string) => {
     const trimmed = (override ?? question).trim()
@@ -25,6 +37,7 @@ export function useAskPhase2() {
     if (override !== undefined) setQuestion(override)
 
     abortRef.current?.abort()
+    cancelPendingFlush() // drop any stale flush from a previous run
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -45,6 +58,14 @@ export function useAskPhase2() {
       setResponse({ ...meta, answer: acc } as Phase2AskResponse)
     }
 
+    const scheduleFlush = () => {
+      if (flushTimerRef.current !== null) return
+      flushTimerRef.current = window.setTimeout(() => {
+        flushTimerRef.current = null
+        mergePartial()
+      }, 50)
+    }
+
     try {
       const final = await askPhase2Stream(
         trimmed,
@@ -63,9 +84,10 @@ export function useAskPhase2() {
               setFirstTokenMs(Math.round(performance.now() - start))
             }
             acc += text
-            mergePartial()
+            scheduleFlush()
           },
           onFinal: (event: StreamEvent) => {
+            cancelPendingFlush() // a stale partial flush must not overwrite the final payload
             setResponse({
               question: event.question,
               question_type: event.question_type,
@@ -79,6 +101,7 @@ export function useAskPhase2() {
             })
           },
           onIgnored: (event: StreamEvent) => {
+            cancelPendingFlush()
             setResponse({
               question: trimmed,
               question_type: "ignored",
@@ -105,9 +128,11 @@ export function useAskPhase2() {
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return
+      cancelPendingFlush() // a stale partial flush must not overwrite the error state
       setResponse(null)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
+      cancelPendingFlush()
       setLoading(false)
       setStreaming(false)
     }

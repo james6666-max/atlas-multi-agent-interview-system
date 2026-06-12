@@ -32,7 +32,9 @@ hiddenimports += collect_submodules("app")
 hiddenimports += ["orchestrator_v0", "blackboard_store", "run_backend"]
 hiddenimports += collect_submodules("uvicorn")
 
-for name in ["blackboard_schema.json", "blackboard_instance.json", "resume.txt", "jd.txt", "knowledge.txt"]:
+# blackboard_instance.json intentionally not bundled (dev-session state);
+# the backend creates a clean instance on first launch.
+for name in ["blackboard_schema.json", "resume.txt", "jd.txt", "knowledge.txt"]:
     datas.append((name, "."))
 
 block_cipher = None

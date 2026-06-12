@@ -423,6 +423,7 @@ function AtlasDashboardPage() {
                   knowledgeStatus={blackboard.knowledgeStatus}
                   ragStatus={blackboard.ragStatus}
                   localAskLoading={imageAsk.loading}
+                  ocrResult={imageAsk.result}
                   onAskImage={imageAsk.submitImage}
                   onAskRegionImage={imageAsk.submitRegionImage}
                   voiceLanguage={audioAsk.language}
