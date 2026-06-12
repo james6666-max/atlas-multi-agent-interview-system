@@ -1,16 +1,15 @@
-{
+﻿{
+  "//": "Editor-only config for electron/*.ts (the build uses ../tsconfig.electron.json; nothing references this file). module=preserve + moduleResolution=bundler matches how the electron main process is actually built (bundled by vite) and is accepted by both the project's TS 5.8 and VS Code's newer bundled TS — the previous moduleResolution=node was flagged as deprecated by the editor's TS 6/7 track.",
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
+    "module": "preserve",
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "noImplicitAny": true,
     "sourceMap": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
-    "outDir": "../dist-electron",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true
   },

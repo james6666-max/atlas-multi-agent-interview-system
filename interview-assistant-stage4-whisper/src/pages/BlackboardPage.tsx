@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n/LanguageProvider"
+
 interface BlackboardPageProps {
   history: any[]
   showHistory: boolean
@@ -11,19 +13,20 @@ export default function BlackboardPage({
   onToggleHistory,
   getScoreColor
 }: BlackboardPageProps) {
+  const { t } = useI18n()
   return (
     <section className="legacy-panel">
       <div className="legacy-panel-header">
-        <h2>History</h2>
+        <h2>{t("review.history")}</h2>
         <button className="legacy-link-button" onClick={onToggleHistory}>
-          {showHistory ? "Collapse" : "Expand"}
+          {showHistory ? t("review.collapse") : t("review.expand")}
         </button>
       </div>
 
       {showHistory && (
         <div className="legacy-scroll-panel">
           {history.length === 0 && (
-            <div className="legacy-empty-state">No blackboard history yet.</div>
+            <div className="legacy-empty-state">{t("review.empty")}</div>
           )}
 
           {history.slice(0, 10).map((item, index) => {
@@ -33,12 +36,12 @@ export default function BlackboardPage({
             return (
               <article className="legacy-history-item" key={`${item?.turn_id || index}`}>
                 <div className="legacy-badge-row">
-                  <span className="legacy-badge legacy-badge-blue">{item?.question_type || "Unknown"}</span>
-                  <span className="legacy-badge legacy-badge-green">{item?.agent || "Unknown"}</span>
-                  <span className="legacy-badge">{item?.source || "unknown"}</span>
+                  <span className="legacy-badge legacy-badge-blue">{item?.question_type || t("common.unknown")}</span>
+                  <span className="legacy-badge legacy-badge-green">{item?.agent || t("common.unknown")}</span>
+                  <span className="legacy-badge">{item?.source || t("common.unknown")}</span>
                 </div>
 
-                <div className="legacy-question">{item?.question || "No question text."}</div>
+                <div className="legacy-question">{item?.question || t("review.noQuestion")}</div>
 
                 {item?.answer && (
                   <div className="legacy-answer-preview">{String(item.answer).slice(0, 220)}</div>
@@ -46,31 +49,31 @@ export default function BlackboardPage({
 
                 {item?.critic && (
                   <div className="legacy-critic-box">
-                    <div className="legacy-critic-title">Critic Review</div>
+                    <div className="legacy-critic-title">{t("review.criticReview")}</div>
                     <div className="legacy-metric-grid">
                       <div>
-                        <span>Final Score</span>
+                        <span>{t("review.finalScore")}</span>
                         <strong style={{ color: getScoreColor(finalScore === null ? null : finalScore / 100) }}>
-                          {finalScore ?? "unknown"}
+                          {finalScore ?? t("common.unknown")}
                         </strong>
                       </div>
                       <div>
-                        <span>Clarity</span>
-                        <strong>{typeof critic.clarity_score === "number" ? `${(critic.clarity_score * 100).toFixed(0)}%` : "unknown"}</strong>
+                        <span>{t("review.clarity")}</span>
+                        <strong>{typeof critic.clarity_score === "number" ? `${(critic.clarity_score * 100).toFixed(0)}%` : t("common.unknown")}</strong>
                       </div>
                       <div>
-                        <span>Correctness</span>
-                        <strong>{typeof critic.correctness_score === "number" ? `${(critic.correctness_score * 100).toFixed(0)}%` : "unknown"}</strong>
+                        <span>{t("review.correctness")}</span>
+                        <strong>{typeof critic.correctness_score === "number" ? `${(critic.correctness_score * 100).toFixed(0)}%` : t("common.unknown")}</strong>
                       </div>
                       <div>
-                        <span>Privacy</span>
-                        <strong>{typeof critic.privacy_score === "number" ? `${(critic.privacy_score * 100).toFixed(0)}%` : "unknown"}</strong>
+                        <span>{t("review.privacy")}</span>
+                        <strong>{typeof critic.privacy_score === "number" ? `${(critic.privacy_score * 100).toFixed(0)}%` : t("common.unknown")}</strong>
                       </div>
                     </div>
 
                     {Array.isArray(critic.specific_issues) && critic.specific_issues.length > 0 && (
                       <div className="legacy-note-line">
-                        Issues: {critic.specific_issues.slice(0, 3).join(" / ")}
+                        {t("review.issues")}: {critic.specific_issues.slice(0, 3).join(" / ")}
                       </div>
                     )}
                   </div>

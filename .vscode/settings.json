@@ -1,0 +1,6 @@
+{
+  "//": "Pin the editor's TypeScript to the workspace version (5.8.3) so editor diagnostics match what the build / tsc / tests use. VS Code's newer bundled TypeScript flags options on its TS 6/7 deprecation track (moduleResolution=node, baseUrl, ...) that the project's 5.8.3 does not. After opening the workspace, confirm via: Ctrl+Shift+P -> 'TypeScript: Select TypeScript Version' -> 'Use Workspace Version'.",
+  "typescript.tsdk": "interview-assistant-stage4-whisper/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "js/ts.tsdk.path": "interview-assistant-stage4-whisper/node_modules/typescript/lib"
+}
