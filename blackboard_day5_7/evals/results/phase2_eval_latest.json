@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-06-12T09:59:52",
+  "generated_at": "2026-06-12T11:50:40",
   "total_cases": 50,
   "total_score": 250,
   "max_score": 250,
   "accuracy": 1.0,
-  "avg_latency_ms": 192.42,
-  "p95_latency_ms": 271,
+  "avg_latency_ms": 185.98,
+  "p95_latency_ms": 262,
   "by_category": {
     "tech": {
       "cases": 10,
@@ -90,7 +90,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 174,
+      "latency_ms": 150,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -140,7 +140,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 166,
+      "latency_ms": 163,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -190,7 +190,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 166,
+      "latency_ms": 165,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -240,7 +240,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 171,
+      "latency_ms": 172,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -290,7 +290,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 172,
+      "latency_ms": 162,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -340,7 +340,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 178,
+      "latency_ms": 166,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -390,7 +390,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 180,
+      "latency_ms": 163,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -440,7 +440,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 185,
+      "latency_ms": 180,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -490,7 +490,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 182,
+      "latency_ms": 157,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -540,7 +540,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 195,
+      "latency_ms": 176,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -590,7 +590,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 182,
+      "latency_ms": 175,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -640,7 +640,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 186,
+      "latency_ms": 188,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -690,7 +690,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 203,
+      "latency_ms": 184,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -740,7 +740,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 196,
+      "latency_ms": 187,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -790,7 +790,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 210,
+      "latency_ms": 179,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -840,7 +840,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 155,
+      "latency_ms": 217,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -890,7 +890,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 216,
+      "latency_ms": 207,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -940,7 +940,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 217,
+      "latency_ms": 219,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -990,7 +990,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 220,
+      "latency_ms": 211,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1040,7 +1040,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 209,
+      "latency_ms": 205,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1090,7 +1090,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 221,
+      "latency_ms": 205,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1140,7 +1140,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 227,
+      "latency_ms": 209,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1190,7 +1190,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 211,
+      "latency_ms": 210,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1240,7 +1240,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 238,
+      "latency_ms": 226,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1290,7 +1290,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 225,
+      "latency_ms": 210,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1340,7 +1340,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 214,
+      "latency_ms": 163,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1390,7 +1390,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 231,
+      "latency_ms": 222,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1440,7 +1440,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 231,
+      "latency_ms": 238,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1490,7 +1490,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 221,
+      "latency_ms": 236,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1540,7 +1540,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 241,
+      "latency_ms": 200,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1590,7 +1590,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 250,
+      "latency_ms": 230,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1640,7 +1640,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 239,
+      "latency_ms": 237,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1690,7 +1690,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 238,
+      "latency_ms": 264,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1740,7 +1740,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 245,
+      "latency_ms": 243,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1790,7 +1790,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 239,
+      "latency_ms": 242,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1840,7 +1840,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 240,
+      "latency_ms": 247,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1890,7 +1890,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 236,
+      "latency_ms": 237,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1940,7 +1940,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 213,
+      "latency_ms": 262,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -1990,7 +1990,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 314,
+      "latency_ms": 262,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2040,7 +2040,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 272,
+      "latency_ms": 257,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2090,7 +2090,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 246,
+      "latency_ms": 282,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2140,7 +2140,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 266,
+      "latency_ms": 251,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2190,7 +2190,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 250,
+      "latency_ms": 254,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2240,7 +2240,7 @@
       "context_used": true,
       "rag_used": true,
       "status_code": 200,
-      "latency_ms": 271,
+      "latency_ms": 220,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2292,7 +2292,7 @@
       "context_used": false,
       "rag_used": false,
       "status_code": 200,
-      "latency_ms": 29,
+      "latency_ms": 21,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2396,7 +2396,7 @@
       "context_used": false,
       "rag_used": false,
       "status_code": 200,
-      "latency_ms": 10,
+      "latency_ms": 9,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2448,7 +2448,7 @@
       "context_used": false,
       "rag_used": false,
       "status_code": 200,
-      "latency_ms": 11,
+      "latency_ms": 9,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2500,7 +2500,7 @@
       "context_used": false,
       "rag_used": false,
       "status_code": 200,
-      "latency_ms": 10,
+      "latency_ms": 9,
       "checks": {
         "question_type": true,
         "selected_agent": true,
@@ -2552,7 +2552,7 @@
       "context_used": false,
       "rag_used": false,
       "status_code": 200,
-      "latency_ms": 10,
+      "latency_ms": 9,
       "checks": {
         "question_type": true,
         "selected_agent": true,

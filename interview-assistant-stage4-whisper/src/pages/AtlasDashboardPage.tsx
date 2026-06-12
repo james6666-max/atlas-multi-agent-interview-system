@@ -18,6 +18,7 @@ import { StatusCard } from "../components/Phase2/StatusCard"
 import { useI18n } from "../i18n/LanguageProvider"
 import { ToastContext } from "../contexts/toast"
 import { useAudioAsk } from "../hooks/useAudioAsk"
+import { useBackendStatus } from "../hooks/useBackendStatus"
 import { useBlackboard } from "../hooks/useBlackboard"
 import { useImageAsk } from "../hooks/useImageAsk"
 import { useReportActions } from "../hooks/useReportActions"
@@ -113,6 +114,7 @@ function getScoreColor(score: unknown) {
 function AtlasDashboardPage() {
   const { t } = useI18n()
   const [view, setView] = useState<PhaseView>("live")
+  const backendBoot = useBackendStatus()
   const blackboard = useBlackboard()
   const imageAsk = useImageAsk(blackboard.fetchBlackboard)
   const audioAsk = useAudioAsk(blackboard.fetchBlackboard)
@@ -364,6 +366,22 @@ function AtlasDashboardPage() {
             <DashboardHeader onOpenSettings={() => setIsSettingsOpen(true)} />
 
             <PhaseNav view={view} onChange={setView} backendConnected={blackboard.backendStatus.connected} />
+
+            {!backendBoot.online && (
+              <div style={{
+                maxWidth: 980,
+                margin: "0 auto 4px",
+                padding: "8px 14px",
+                borderRadius: 10,
+                fontSize: 12.5,
+                color: "rgba(255,224,138,0.95)",
+                background: "rgba(250,204,21,0.08)",
+                border: "1px solid rgba(250,204,21,0.3)",
+                textAlign: "center"
+              }}>
+                {t("boot.backendStarting")}
+              </div>
+            )}
 
             {/* ① 面试前 · 准备 */}
             {view === "prep" && (

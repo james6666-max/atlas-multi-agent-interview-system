@@ -11,6 +11,7 @@ deterministic bank unless an optional LLM generator is injected. No dependency
 on orchestrator_v0, so it is fully unit-testable without a server or model.
 """
 
+import threading
 from typing import Any, Callable, Dict, List, Optional
 
 from app.coaching import question_bank
@@ -45,6 +46,9 @@ class _Session:
         self.completed = False
         self.config = config
         self.language = language
+        # Guards queue mutation between the request thread (answers/follow-ups)
+        # and the background LLM tailoring thread.
+        self.lock = threading.Lock()
 
     @property
     def current(self) -> Optional[PracticeQuestion]:
@@ -113,13 +117,28 @@ class CoachingService:
         focus: str = "",
         num_questions: int = 5,
         language: str = "zh",
+        tailor_in_background: bool = False,
     ) -> PracticeState:
+        """Start a practice session.
+
+        With tailor_in_background=True (the HTTP path) the session starts
+        instantly from the deterministic bank and a background thread swaps in
+        LLM-tailored questions once they are ready — instead of blocking the
+        user for the 10-30s a local model needs. Default False keeps the
+        original fully synchronous behaviour (tests / direct callers).
+        """
         sources = self._load_sources()
         hint = self._profile_hint(role=role, focus=focus)
-        plan = question_bank.build_plan_with_llm(
-            sources["resume"], sources["jd"], sources["knowledge"], num_questions,
-            self._llm_generate, language, profile_hint=hint,
-        )
+        use_async_tailor = tailor_in_background and self._llm_generate is not None
+        if use_async_tailor:
+            plan = question_bank.build_plan(
+                sources["resume"], sources["jd"], sources["knowledge"], num_questions, language
+            )
+        else:
+            plan = question_bank.build_plan_with_llm(
+                sources["resume"], sources["jd"], sources["knowledge"], num_questions,
+                self._llm_generate, language, profile_hint=hint,
+            )
         config = {
             "role": role,
             "focus": focus,
@@ -128,49 +147,99 @@ class CoachingService:
             "language": language,
             "has_resume": bool(sources["resume"].strip()),
             "has_jd": bool(sources["jd"].strip()),
-            "question_source": "llm+bank" if self._llm_generate else "bank",
+            "question_source": (
+                "bank+llm_async" if use_async_tailor
+                else ("llm+bank" if self._llm_generate else "bank")
+            ),
         }
         self._sessions[session_id] = _Session(session_id, plan, config, language)
+        if use_async_tailor:
+            threading.Thread(
+                target=self._tailor_plan_async,
+                args=(session_id, sources, num_questions, language, hint),
+                name=f"practice-tailor-{session_id}",
+                daemon=True,
+            ).start()
         return self.state(session_id)
+
+    def _tailor_plan_async(
+        self,
+        session_id: str,
+        sources: Dict[str, str],
+        num_questions: int,
+        language: str,
+        hint: str,
+    ) -> None:
+        try:
+            plan = question_bank.build_plan_with_llm(
+                sources["resume"], sources["jd"], sources["knowledge"], num_questions,
+                self._llm_generate, language, profile_hint=hint,
+            )
+        except Exception:
+            return  # keep the bank plan; tailoring is best-effort
+        # build_plan_with_llm silently falls back to the deterministic bank on
+        # LLM failure / empty output. Detect that case (build_plan is
+        # deterministic for identical inputs) so the bank plan is not
+        # mislabelled as LLM-tailored.
+        base = question_bank.build_plan(
+            sources["resume"], sources["jd"], sources["knowledge"], num_questions, language
+        )
+        if [q["question"] for q in plan] == [q["question"] for q in base]:
+            return
+        session = self._sessions.get(session_id)
+        if session is None:
+            return
+        with session.lock:
+            # Swap only while the user is still on the very first question and
+            # nothing has been answered or inserted — otherwise keep the bank
+            # plan to avoid pulling questions out from under the user.
+            if session.completed or session.cursor != 0 or session.turns or session.followups_used:
+                return
+            new_tail = [PracticeQuestion(**item) for item in plan[1:]]
+            session.queue = [session.queue[0], *new_tail]
+            session.config["question_source"] = "llm+bank"
 
     def submit_answer(self, session_id: str, answer: str) -> Dict[str, Any]:
         session = self._sessions.get(session_id)
         if session is None or session.completed:
             raise ValueError("No active practice session. Call /practice/start first.")
 
-        question = session.current
-        if question is None:
-            session.completed = True
-            return {"completed": True, "feedback": None, "next_question": None, "state": self.state(session_id)}
+        # Held across the whole turn so the background tailoring thread can
+        # never swap the queue mid-answer.
+        with session.lock:
+            question = session.current
+            if question is None:
+                session.completed = True
+                return {"completed": True, "feedback": None, "next_question": None, "state": self.state(session_id)}
 
-        context = self._context_builder(question.question)
-        critic = self._scorer(
-            question=question.question,
-            answer=answer or "",
-            question_type=question.type,
-            selected_agent=_AGENT_BY_TYPE.get(question.type, "Behavioral"),
-            context=context,
-            rag={},
-        )
-        score = int(critic.get("score", critic.get("final_score", 0)) or 0)
-        session.turns.append(
-            PracticeTurn(question=question, answer=answer or "", score=score, critic=critic)
-        )
+            context = self._context_builder(question.question)
+            critic = self._scorer(
+                question=question.question,
+                answer=answer or "",
+                question_type=question.type,
+                selected_agent=_AGENT_BY_TYPE.get(question.type, "Behavioral"),
+                context=context,
+                rag={},
+            )
+            score = int(critic.get("score", critic.get("final_score", 0)) or 0)
+            session.turns.append(
+                PracticeTurn(question=question, answer=answer or "", score=score, critic=critic)
+            )
 
-        # Adaptive follow-up: probe weak or experience-based answers, within budget.
-        self._maybe_insert_followup(session, question, score)
+            # Adaptive follow-up: probe weak or experience-based answers, within budget.
+            self._maybe_insert_followup(session, question, score)
 
-        session.cursor += 1
-        if session.cursor >= len(session.queue):
-            session.completed = True
+            session.cursor += 1
+            if session.cursor >= len(session.queue):
+                session.completed = True
 
-        return {
-            "completed": session.completed,
-            "feedback": critic,
-            "score": score,
-            "next_question": (None if session.completed else session.current.model_dump()),
-            "state": self.state(session_id),
-        }
+            return {
+                "completed": session.completed,
+                "feedback": critic,
+                "score": score,
+                "next_question": (None if session.completed else session.current.model_dump()),
+                "state": self.state(session_id),
+            }
 
     def _maybe_insert_followup(self, session: _Session, question: PracticeQuestion, score: int) -> None:
         if session.followups_used >= MAX_FOLLOWUPS:

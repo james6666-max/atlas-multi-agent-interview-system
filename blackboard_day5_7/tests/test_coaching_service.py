@@ -121,6 +121,52 @@ def test_submit_without_start_raises():
         pass
 
 
+def test_background_tailoring_swaps_in_llm_questions():
+    import time
+
+    def fake_llm(prompt: str) -> str:
+        return (
+            "请解释 FastAPI 的依赖注入是怎么工作的?\n"
+            "讲一个你最有成就感的项目。\n"
+            "如果让你设计一个高并发的限流系统,你会怎么做?\n"
+            "你在简历里提到的 RAG,具体是怎么实现的?\n"
+        )
+
+    svc = make_service(llm=fake_llm)
+    state = svc.start("bg1", num_questions=4, tailor_in_background=True)
+    # Instant start from the bank — no blocking on the LLM call.
+    assert state.active is True
+    assert state.current_question is not None
+    assert state.config["question_source"] in {"bank+llm_async", "llm+bank"}
+
+    # The background thread should swap in tailored questions shortly.
+    deadline = time.time() + 2.0
+    swapped = False
+    while time.time() < deadline:
+        if svc.state("bg1").config.get("question_source") == "llm+bank":
+            swapped = True
+            break
+        time.sleep(0.02)
+    assert swapped
+    # The shown first question is kept; tailored questions fill the rest, so
+    # assert on questions known to sit beyond the tailored plan's first slot.
+    questions = [q.question for q in svc._sessions["bg1"].queue]
+    assert any(("限流" in q) or ("RAG" in q) for q in questions)
+
+
+def test_background_tailoring_failure_keeps_bank_plan():
+    def broken_llm(prompt: str) -> str:
+        raise RuntimeError("model offline")
+
+    svc = make_service(llm=broken_llm)
+    state = svc.start("bg2", num_questions=4, tailor_in_background=True)
+    assert state.active is True
+    # Session stays fully usable on the bank plan.
+    result = svc.submit_answer("bg2", "一些回答内容,包含复杂度和例子。")
+    assert result["state"].active in {True, False}
+    assert svc.state("bg2").config["question_source"] == "bank+llm_async"
+
+
 def test_llm_questions_used_when_available():
     def fake_llm(prompt: str) -> str:
         return (

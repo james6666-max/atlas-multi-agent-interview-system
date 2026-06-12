@@ -2241,6 +2241,10 @@ def practice_start(req: StartRequest):
         focus=req.focus,
         num_questions=req.num_questions,
         language=req.language,
+        # Instant start: first question comes from the deterministic bank and
+        # LLM-tailored questions are swapped in by a background thread, instead
+        # of blocking this request for the 10-30s a local model can take.
+        tailor_in_background=True,
     )
     return state.model_dump()
 

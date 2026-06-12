@@ -3,7 +3,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { app, BrowserWindow, ipcMain, nativeImage, screen } from "electron";
-import type { Rectangle } from "electron";
+import type { Display, Rectangle } from "electron";
 import { v4 as uuidv4 } from "uuid";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -176,8 +176,7 @@ export class ScreenshotHelper {
     }
   }
 
-  private async chooseScreenshotRegion(): Promise<Rectangle | null> {
-    const display = screen.getPrimaryDisplay();
+  private async chooseScreenshotRegion(display: Display): Promise<Rectangle | null> {
     const channelId = uuidv4();
     const selectedChannel = `region-screenshot-selected-${channelId}`;
     const cancelChannel = `region-screenshot-cancel-${channelId}`;
@@ -317,9 +316,24 @@ export class ScreenshotHelper {
       ipcMain.once(selectedChannel, (_event, region: Rectangle) => finish(region));
       ipcMain.once(cancelChannel, () => finish(null));
       overlay.once("closed", () => finish(null));
+
+      // Show only after the dimmed page has rendered. While the document is
+      // still loading the window is fully transparent, and Windows makes
+      // alpha-0 areas of transparent windows click-through — clicks would
+      // land on the window below (e.g. a chat app) instead of starting the
+      // selection.
+      let shown = false;
+      const reveal = () => {
+        if (shown || overlay.isDestroyed()) return;
+        shown = true;
+        overlay.show();
+        overlay.focus();
+      };
+      overlay.webContents.once("did-finish-load", reveal);
+      // Safety net: never leave an invisible overlay blocking the flow.
+      setTimeout(reveal, 800);
+
       overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      overlay.show();
-      overlay.focus();
     });
   }
 
@@ -543,7 +557,9 @@ export class ScreenshotHelper {
     showMainWindow: () => void
   ): Promise<string | null> {
     console.log("Taking region screenshot in view:", this.view);
-    const display = screen.getPrimaryDisplay();
+    // Select on the display the cursor is on, so questions shown on a
+    // secondary monitor can be captured too (was: primary display only).
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     hideMainWindow();
 
     const hideDelay = process.platform === "win32" ? 300 : 180;
@@ -551,7 +567,8 @@ export class ScreenshotHelper {
 
     let screenshotPath = "";
     try {
-      const selection = await this.chooseScreenshotRegion();
+      // Dim overlay for selection, then capture and crop the chosen region.
+      const selection = await this.chooseScreenshotRegion(display);
       if (!selection) {
         console.log("Region screenshot cancelled");
         return null;
